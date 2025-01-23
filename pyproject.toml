@@ -20,6 +20,8 @@ ruff = "^0.6.8"
 isort = "^5.13.2"
 pre-commit = "^3.8.0"
 pandas = "^2.2.3"
+webdriver-manager = "^4.0.2"
+selenium = "^4.28.1"
 
 
 [build-system]

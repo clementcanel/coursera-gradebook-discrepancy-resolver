@@ -9,17 +9,17 @@
 # - replace the login details with your own
 # run program with 'pytest selenium_login.py'
 
-from seleniumbase import BaseCase
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 
-class HomeTest(BaseCase):
+
+class HomeTest:
 
     # setup chromedriver with user profile
     def get_new_driver(self, *args, **kwargs):
         # file path to local chrome data
         user_data_dir = "/Users/<username>/Library/Application Support/Google/Chrome"
-        profile_dir = "<chosen profile>" # replace with your chrome profile folder name
+        profile_dir = "<chosen profile>"  # replace with your chrome profile folder name
 
         # used to configure browser settings
         chrome_options = webdriver.ChromeOptions()
@@ -28,7 +28,9 @@ class HomeTest(BaseCase):
         # specifies the profile to be used
         chrome_options.add_argument(f"--profile-directory={profile_dir}")
         # the path to your chrome executable (this is the default location on mac)
-        chrome_options.binary_location = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        chrome_options.binary_location = (
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        )
         #
         chrome_options.add_argument("--remote-debugging-port=9222")
 
