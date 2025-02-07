@@ -1,5 +1,10 @@
 import csv 
 
+# -------------------------------
+# Data Models and CSV Loaders
+# -------------------------------
+
+
 # Class to represent a student's record, containing personal info and assessments
 class StudentRecord:
     def __init__(self, student_id, first_name, last_name, email, assessments):
@@ -110,3 +115,25 @@ def compare_records(coursera_data, registrar_data):
                     'note': result['note']
                 }
     return discrepancies
+
+# -------------------------------
+# Main Execution Block
+# -------------------------------
+
+if __name__ == "__main__":
+    coursera_csv_path = ""
+    registrar_csv_path = ""
+    # Load the Coursera data.
+    coursera_data = load_gradebook(coursera_csv_path)
+    
+    try:
+        registrar_data = load_registrar_data(registrar_csv_path)
+    except Exception as e:
+        print("Error loading registrar CSV. Using dummy data instead.")
+        registrar_data = load_dummy_registrar_data()
+    
+    discrepancies = compare_records(coursera_data, registrar_data)
+    print("Discrepancies found:", discrepancies)
+    
+    for key, value in discrepancies.items():
+        resolve_discrepancy({key: value})
