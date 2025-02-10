@@ -27,6 +27,17 @@ class BasePage:
         )
         self.driver.find_element(*locator).click()
 
+    def js_click(self, locator: tuple, timeout=10):
+        """
+        locates an element by 'presence_of_element_located',
+        then clicks it via JavaScript execution
+        """
+        element = WebDriverWait(self.driver, timeout).until(
+            EC.presence_of_element_located(locator),
+            message=f"Element {locator} not present within {timeout}s"
+        )
+        self.driver.execute_script("arguments[0].click();", element)
+
     """
         type text into an input specified by a locator (by, value) tuple
         example:
@@ -43,12 +54,12 @@ class BasePage:
         elem.send_keys(text)
 
     """
-        return True if the element is visible within `timeout` seconds or else False
+        return True if the element is present within `timeout` seconds or else False
     """
-    def is_element_visible(self, locator: tuple, timeout=10) -> bool:
+    def is_element_present(self, locator: tuple, timeout=10) -> bool:
         try:
             WebDriverWait(self.driver, timeout).until(
-                EC.visibility_of_element_located(locator)
+                EC.presence_of_element_located(locator)
             )
             return True
         except:

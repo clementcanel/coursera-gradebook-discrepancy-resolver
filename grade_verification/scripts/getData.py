@@ -108,19 +108,3 @@ def get_chrome_profile_dir(user_data_dir):
     selected_profile_folder, selected_profile_name = profile_choices[idx]
     set_key(ENV_FILE_PATH, "PROFILE_DIR", selected_profile_folder)
     return selected_profile_folder
-
-
-def get_coursera_password():
-    """
-    prompt for the password
-    """
-    password = input("Please enter your Coursera account password: ")
-    return password
-
-
-def get_coursera_username():
-    """
-    prompt for the username
-    """
-    username = input("Please enter your Coursera account email: ")
-    return username
