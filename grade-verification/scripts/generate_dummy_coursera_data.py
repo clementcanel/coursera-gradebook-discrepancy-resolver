@@ -1,5 +1,6 @@
 import csv
 import random
+import uuid
 from datetime import datetime, timedelta
 
 from faker import Faker
@@ -50,13 +51,13 @@ def generate_dummy_data(num_students=10):
 
     rows = []
     for _ in range(num_students):
-        student_id = fake.uuid4()
+        student_id = random.randint(100000000, 999999999)
         first_name = fake.first_name()
         last_name = fake.last_name()
         email = fake.email()
         course_id = fake.uuid4()
         term_id = random.randint(1, 10)
-        external_student_id = random.randint(1000, 9999)
+        external_student_id = uuid.uuid4()
 
         row = [
             student_id,
