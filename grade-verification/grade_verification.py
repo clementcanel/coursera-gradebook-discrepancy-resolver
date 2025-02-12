@@ -1,26 +1,25 @@
-import csv 
+import csv
+import pandas as pd
+import os
 
 # -------------------------------
 # Data Models and CSV Loaders
 # -------------------------------
 
-
-# Class to represent a student's record, containing personal info and assessments
 class StudentRecord:
     def __init__(self, student_id, first_name, last_name, email, assessments):
-        self.student_id = student_id
-        self.first_name = first_name
-        self.last_name = last_name
-        self.email = email
-        self.assessments = assessments
+        self.student_id = student_id      #
+        self.first_name = first_name     
+        self.last_name = last_name        
+        self.email = email                
+        self.assessments = assessments    
 
-# Function to load a gradebook CSV file and return a dictionary of StudentRecord objects keyed by student ID.
 def load_gradebook(file_path):
-    records = {}  
+    records = {}
     with open(file_path, newline='') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            student_id = row['Student ID'] 
+            student_id = row['Student ID']
             assessments = extract_assessments(row)
             records[student_id] = StudentRecord(
                 student_id,
@@ -31,7 +30,6 @@ def load_gradebook(file_path):
             )
     return records
 
-# Helper function to extract assessment data from a CSV row.
 def extract_assessments(row):
     assessments = {}
     for key, value in row.items():
@@ -39,7 +37,30 @@ def extract_assessments(row):
             assessments[key] = value
     return assessments
 
-# Function to load dummy registrar data for testing.
+def load_registrar_data_pd(file_path):
+    records = {}
+    try:
+        df = pd.read_csv(file_path)
+        for index, row in df.iterrows():
+            student_id = str(row['emplid'])
+            assessments = {
+                "Letter Grade": row['incoming grade'],
+                "subject": row.get('subject', ''),
+                "catalog": row.get('catalog', ''),
+                "section": row.get('section', ''),
+                "class_nbr": row.get('class_nbr', '')
+            }
+            records[student_id] = StudentRecord(
+                student_id,
+                row.get('first_name', ''),
+                row.get('last_name', ''),
+                row.get('email', ''),
+                assessments
+            )
+    except Exception as e:
+        print("Error loading registrar data via pandas:", e)
+    return records
+
 def load_dummy_registrar_data():
     dummy_records = {
         "12345": StudentRecord("12345", "Alice", "Smith", "alice@example.com", {"Letter Grade": "B"}),
@@ -49,21 +70,8 @@ def load_dummy_registrar_data():
 # -------------------------------
 # Discrepancy Logic
 # -------------------------------
+
 def evaluate_grade_discrepancy(old_grade, new_grade, honor_quiz_completed):
-    """
-    Compares the old (registrar) and new (Coursera) grades and applies the rules:
-    1. If the old grade is A-F (not W):
-       - If new grade equals old grade: No discrepancy.
-       - If new grade is higher (better): Discrepancy; update to new grade.
-       - If new grade is lower (worse): Discrepancy; update to new grade and flag as not expected.
-    2. If the old grade is W:
-       - If new grade is non-W and honor quiz is completed: Discrepancy; update to new grade.
-       - If new grade is non-W and honor quiz is not completed: Discrepancy; keep old grade.
-    Returns a dictionary with:
-      - 'discrepancy': Boolean flag.
-      - 'final_grade': The grade that should be used.
-      - 'note': Explanation of the decision.
-    """
     if old_grade != 'W':
         if new_grade == old_grade:
             return {'discrepancy': False, 'final_grade': old_grade, 'note': 'No change; grades are the same.'}
@@ -84,15 +92,7 @@ def evaluate_grade_discrepancy(old_grade, new_grade, honor_quiz_completed):
         else:
             return {'discrepancy': False, 'final_grade': old_grade, 'note': 'No change; both grades are W.'}
 
-
 def compare_records(coursera_data, registrar_data):
-    """
-    Compares the new (Coursera) and old (registrar) records:
-      - Flags missing registrar records.
-      - Applies grade discrepancy rules for matching student IDs.
-      
-    Returns a dictionary detailing missing records and any grade discrepancies.
-    """
     discrepancies = {
         'missing_in_registrar': [],
         'grade_discrepancies': {}
@@ -103,9 +103,7 @@ def compare_records(coursera_data, registrar_data):
         else:
             old_grade = registrar_data[student_id].assessments.get('Letter Grade')
             new_grade = record.assessments.get('Letter Grade')
-            # Get honor quiz status (defaulting to 'False' if not present)
-            honor_quiz_status = record.assessments.get('Honor Quiz Completed', 'False')
-            honor_quiz_completed = honor_quiz_status.lower() in ['true', 'yes', '1']
+            honor_quiz_completed = 'Honor Quiz' in record.assessments
             result = evaluate_grade_discrepancy(old_grade, new_grade, honor_quiz_completed)
             if result['discrepancy']:
                 discrepancies['grade_discrepancies'][student_id] = {
@@ -116,24 +114,36 @@ def compare_records(coursera_data, registrar_data):
                 }
     return discrepancies
 
+def resolve_discrepancy(discrepancy):
+    print("Resolving discrepancy:", discrepancy)
+
 # -------------------------------
 # Main Execution Block
 # -------------------------------
 
 if __name__ == "__main__":
-    coursera_csv_path = ""
-    registrar_csv_path = ""
-    # Load the Coursera data.
-    coursera_data = load_gradebook(coursera_csv_path)
-    
+    # UPDATEE
+    coursera_csv_path = "dummy_coursera_data.csv"
+    registrar_csv_path = "path/to/Registrar_Gradebook.csv"
+
+    if os.path.exists(coursera_csv_path):
+        coursera_data = load_gradebook(coursera_csv_path)
+    else:
+        print(f"{coursera_csv_path} not found. Please generate the dummy data.")
+        coursera_data = None
+
     try:
-        registrar_data = load_registrar_data(registrar_csv_path)
+        if os.path.exists(registrar_csv_path):
+            registrar_data = load_registrar_data_pd(registrar_csv_path)
+        else:
+            print(f"{registrar_csv_path} not found. Using dummy registrar data.")
+            registrar_data = load_dummy_registrar_data()
     except Exception as e:
-        print("Error loading registrar CSV. Using dummy data instead.")
+        print("Error loading registrar data:", e)
         registrar_data = load_dummy_registrar_data()
-    
-    discrepancies = compare_records(coursera_data, registrar_data)
-    print("Discrepancies found:", discrepancies)
-    
-    for key, value in discrepancies.items():
-        resolve_discrepancy({key: value})
+
+    if coursera_data is not None:
+        discrepancies = compare_records(coursera_data, registrar_data)
+        print("Discrepancies found:", discrepancies)
+        for key, value in discrepancies.items():
+            resolve_discrepancy({key: value})
