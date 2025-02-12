@@ -27,7 +27,7 @@ class BasePage:
         )
         self.driver.find_element(*locator).click()
 
-    def js_click(self, locator: tuple, timeout=10):
+    def js_click(self, locator: tuple, timeout=20):
         """
         locates an element by 'presence_of_element_located',
         then clicks it via JavaScript execution

@@ -18,7 +18,7 @@ class CoursePage(BasePage):
                 break
             for btn in buttons:
                 try:
-                    btn.js_click()
+                    self.driver.execute_script("arguments[0].click();", btn)
                     self.sleep(1)  # small pause for new rows to render
                 except NoSuchElementException:
                     continue

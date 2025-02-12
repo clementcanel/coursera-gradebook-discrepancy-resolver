@@ -16,7 +16,7 @@ class HomePage(BasePage):
         # click the 'Log In' button on the homepage
         self.js_click(self.LOGIN_SELECTOR)
 
-    def nav_to_courses(self):
+    def scrape_courses(self):
         # click the profile button in the header (via JS)
         self.js_click(self.PROFILE_BUTTON_SELECTOR)
         self.sleep(2)  # wait a moment for dropdown to appear
