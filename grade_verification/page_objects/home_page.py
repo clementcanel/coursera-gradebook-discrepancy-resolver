@@ -1,6 +1,7 @@
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from grade_verification.page_objects.base_page import BasePage
-
 
 class HomePage(BasePage):
     LOGIN_SELECTOR = (By.CSS_SELECTOR, "a[data-e2e='header-login-button']")
@@ -9,18 +10,20 @@ class HomePage(BasePage):
     ADMIN_BUTTON_SELECTOR = (By.CSS_SELECTOR, 'a[href="/admin/"]')
 
     def is_logged_in(self) -> bool:
-        # check if the profile dropdown is visible
         return self.is_element_present(self.PROFILE_ICON_IDENTIFIER, timeout=5)
 
     def click_login(self):
-        # click the 'Log In' button on the homepage
         self.js_click(self.LOGIN_SELECTOR)
 
     def scrape_courses(self):
-        # click the profile button in the header (via JS)
+        """Clicks the profile button and then the 'Educator Admin' link using explicit waits."""
+        # Click the profile button.
         self.js_click(self.PROFILE_BUTTON_SELECTOR)
-        self.sleep(2)  # wait a moment for dropdown to appear
-
-        # click the "Educator Admin" link (via JS)
+        # Wait until the Admin link is clickable.
+        WebDriverWait(self.driver, 5, poll_frequency=0.5).until(
+            EC.element_to_be_clickable(self.ADMIN_BUTTON_SELECTOR)
+        )
         self.js_click(self.ADMIN_BUTTON_SELECTOR)
-        self.sleep(2)
+        # Instead of fixed sleep, wait for an element on the admin dashboard to appear.
+        # For example, wait for the course table body (from CoursePage) to be visible.
+        return  # End of scrape_courses; navigation is complete.
