@@ -13,17 +13,17 @@ class HomePage(BasePage):
         return self.is_element_present(self.PROFILE_ICON_IDENTIFIER, timeout=5)
 
     def click_login(self):
-        self.js_click(self.LOGIN_SELECTOR)
+        self.click(self.LOGIN_SELECTOR)
 
     def scrape_courses(self):
-        """Clicks the profile button and then the 'Educator Admin' link using explicit waits."""
-        # Click the profile button.
-        self.js_click(self.PROFILE_BUTTON_SELECTOR)
-        # Wait until the Admin link is clickable.
+        """clicks the profile button and then the 'educator admin' link using explicit waits"""
+        
+        # click the profile button
+        self.click(self.PROFILE_BUTTON_SELECTOR)
+        # wait until the admin link is clickable
         WebDriverWait(self.driver, 5, poll_frequency=0.5).until(
             EC.element_to_be_clickable(self.ADMIN_BUTTON_SELECTOR)
         )
-        self.js_click(self.ADMIN_BUTTON_SELECTOR)
-        # Instead of fixed sleep, wait for an element on the admin dashboard to appear.
-        # For example, wait for the course table body (from CoursePage) to be visible.
-        return  # End of scrape_courses; navigation is complete.
+        self.click(self.ADMIN_BUTTON_SELECTOR)
+
+        return

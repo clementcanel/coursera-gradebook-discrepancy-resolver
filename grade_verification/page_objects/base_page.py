@@ -1,4 +1,5 @@
 import time
+import re
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException
@@ -11,19 +12,13 @@ class BasePage:
         self.actions = ActionChains(self.driver)
     
     def open(self, url: str):
-        # Navigate the browser to a URL
+        """navigates the browser to the specified URL"""
+
         self.driver.get(url)
 
-    def click(self, locator: tuple, timeout=10):
-        """Waits until the element is clickable and then clicks it."""
-        element = WebDriverWait(self.driver, timeout, poll_frequency=0.5).until(
-            EC.element_to_be_clickable(locator),
-            message=f"Element {locator} not clickable within {timeout}s"
-        )
-        element.click()
+    def click(self, locator: tuple, timeout=8):
+        """waits until the element is present and then clicks it using javaScript"""
 
-    def js_click(self, locator: tuple, timeout=8):
-        """Waits until the element is present and then clicks it using JavaScript."""
         element = WebDriverWait(self.driver, timeout, poll_frequency=0.5).until(
             EC.presence_of_element_located(locator),
             message=f"Element {locator} not present within {timeout}s"
@@ -31,7 +26,8 @@ class BasePage:
         self.driver.execute_script("arguments[0].click();", element)
 
     def type(self, locator: tuple, text: str, clear_first=True, timeout=10):
-        """Waits until the element is visible and then types text into it."""
+        """waits until the element is visible and then types text into it"""
+
         elem = WebDriverWait(self.driver, timeout, poll_frequency=0.5).until(
             EC.visibility_of_element_located(locator),
             message=f"Element {locator} not visible within {timeout}s"
@@ -41,7 +37,8 @@ class BasePage:
         elem.send_keys(text)
 
     def is_element_present(self, locator: tuple, timeout=10) -> bool:
-        """Returns True if the element is present (within the timeout), else False."""
+        """returns True if the element is present (within the timeout), else False"""
+
         try:
             WebDriverWait(self.driver, timeout, poll_frequency=0.5).until(
                 EC.presence_of_element_located(locator)
@@ -50,6 +47,27 @@ class BasePage:
         except Exception:
             return False
 
+    def scroll_into_view(self, locator: tuple, timeout=10):
+        """
+        waits for an element to be present and scrolls it into view
+        returns the element once scrolled
+        """
+
+        element = WebDriverWait(self.driver, timeout, poll_frequency=0.5).until(
+            EC.presence_of_element_located(locator),
+            message=f"Element {locator} not present within {timeout}s"
+        )
+        self.driver.execute_script("arguments[0].scrollIntoView(true);", element)
+        self.sleep(0.5)  # brief pause for scrolling/animation to complete
+        return element
+
+    @staticmethod
+    def sanitize_filename(s: str) -> str:
+        """returns a sanitized version of the given string so its safe for use as a filename"""
+
+        return re.sub(r'[^a-zA-Z0-9_\-]', '_', s)
+
     def sleep(self, seconds: int):
-        """Minimal sleep function; use explicit waits instead whenever possible."""
+        """pauses execution for the given number of seconds"""
+        
         time.sleep(seconds)
