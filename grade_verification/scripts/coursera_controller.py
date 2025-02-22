@@ -25,6 +25,8 @@ class CourseraController:
            - processing each session to scrape grade data and output a CSV file
     """
     def __init__(self):
+        print("1) Begining setup for CU MS-CS Coursera Grade Scraper...")
+        print("--------------------------------------------------------\n")
         # init the driver in headless mode by default
         self.driver = self._init_driver(headless=True)
         # init page objects with the current driver
@@ -39,6 +41,8 @@ class CourseraController:
         options.add_argument("--start-maximized")
         options.add_argument("--disable-backgrounding-occluded-windows")
         options.add_argument("--disable-renderer-backgrounding")
+        options.add_experimental_option('excludeSwitches', ['enable-logging'])
+        options.add_argument("--log-level=1")
         if headless:
             options.add_argument("--headless=new")
             options.add_argument("--window-size=1920,1080")
@@ -54,47 +58,64 @@ class CourseraController:
 
         self.driver.get("https://www.coursera.org")
         try:
-            WebDriverWait(self.driver, 3).until(
-                EC.visibility_of_element_located(self.home_page.PROFILE_ICON_IDENTIFIER)
-            )
-        except Exception:
-            pass
-        if self.home_page.is_logged_in():
-            print("Already logged in...")
+            WebDriverWait(self.driver, 5).until(lambda d: self.home_page.is_logged_in())
+            print("2) Already logged in...")
             return
-        print("Not logged in... Please manually login...")
+        except Exception:
+            print("2) Not logged in, please login manually...")
+            pass
+
         # launch a temporary visible driver for manual login
         visible_driver = self._init_driver(headless=False)
         visible_driver.maximize_window()
         temp_home = HomePage(visible_driver)
+
+        # nav to home page with visible driver, click login button
         visible_driver.get("https://www.coursera.org")
         try:
             WebDriverWait(visible_driver, 5).until(
                 EC.presence_of_element_located(temp_home.LOGIN_SELECTOR)
             )
         except Exception:
-            pass
+            print("Login page failed to load. Retrying...")
+            visible_driver.get("https://www.coursera.org")
         try:
             temp_home.click_login()
         except Exception as e:
-            print("Please log in manually in the visible window.")
-        WebDriverWait(visible_driver, 60).until(lambda d: temp_home.is_logged_in())
+            print("ERROR: Could not click login button...")
+        
+        # wait for user to enter login credentials
+        print("3) Chrome login window opened. You have 2 minutes to log in...")
+        try:
+            WebDriverWait(visible_driver, 120).until(lambda d: temp_home.is_logged_in())
+            print("User successfully logged in...")
+        except Exception as e:
+            print("No login was detected on visible driver...")
+            visible_driver.save_screenshot("after_login_failed.png")
+            return
+
+        # retrieve cookies and add them to headless driver
+        print("4) Retrieving login cookies...")
         cookies = visible_driver.get_cookies()
         visible_driver.quit()
-        print("Transferring cookies to headless driver...")
+
+        print("5) Transferring cookies to headless driver...")
         self.driver.get("https://www.coursera.org")
         for cookie in cookies:
             try:
                 self.driver.add_cookie(cookie)
             except Exception as e:
-                print(f"Error adding cookie: {e}")
+                print(f"ERROR: problem adding cookie: {e}")
         self.driver.refresh()
-        WebDriverWait(self.driver, 5).until(
-            EC.visibility_of_element_located(self.home_page.PROFILE_ICON_IDENTIFIER)
-        )
-        # reinitialize home pagein case cookies changed session state
-        self.home_page = HomePage(self.driver)
-        print("Login successful on headless driver...")
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.visibility_of_element_located(self.home_page.PROFILE_BUTTON_SELECTOR)
+            )
+            # reinitialize home pagein case cookies changed session state
+            self.home_page = HomePage(self.driver)
+            print("6) Login successful on headless driver...")
+        except Exception as e:
+            print(f"6) Could not transfer login to headless driver: {e}")
 
     def nav_to_admin(self):
         """navigates from the home page to the educator admin dashboard"""
@@ -103,7 +124,7 @@ class CourseraController:
         WebDriverWait(self.driver, 5).until(
             EC.visibility_of_element_located(CoursePage.TABLE_BODY_LOCATOR)
         )
-        print("Navigated to Educator Admin dashboard...")
+        print("7) Navigated to Educator Admin dashboard...")
 
     def collect_course_sections(self):
         """scrapes available courses and sections then prompts the user to select sections to scrape"""
