@@ -90,8 +90,7 @@ class CourseraController:
             WebDriverWait(visible_driver, 120).until(lambda d: temp_home.is_logged_in())
             print("User successfully logged in...")
         except Exception as e:
-            print("No login was detected on visible driver...")
-            visible_driver.save_screenshot("after_login_failed.png")
+            print("ERROR: No login was detected on visible driver...")
             return
 
         # retrieve cookies and add them to headless driver
@@ -115,23 +114,29 @@ class CourseraController:
             self.home_page = HomePage(self.driver)
             print("6) Login successful on headless driver...")
         except Exception as e:
-            print(f"6) Could not transfer login to headless driver: {e}")
+            print(f"ERROR: Could not transfer login to headless driver: {e}")
 
     def nav_to_admin(self):
         """navigates from the home page to the educator admin dashboard"""
-
-        self.home_page.scrape_courses() # clicks profile and admin link
-        WebDriverWait(self.driver, 5).until(
-            EC.visibility_of_element_located(CoursePage.TABLE_BODY_LOCATOR)
-        )
-        print("7) Navigated to Educator Admin dashboard...")
+        print("7) Navigating to Educator Admin dashboard...")
+        try:
+            self.home_page.scrape_courses() # clicks profile and admin link
+        except:
+            print("ERROR: Failed to navigate to Educator Admin dashboard...")
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.visibility_of_element_located(CoursePage.TABLE_BODY_LOCATOR)
+            )
+        except:
+            print("ERROR: Failed to locate Course Section table...")
+        
 
     def collect_course_sections(self):
         """scrapes available courses and sections then prompts the user to select sections to scrape"""
 
         course_list = self.course_page.scrape_courses()
         if not course_list:
-            print("No courses found...")
+            print("ERROR: No courses found...")
             return []
         print("\n--- COURSE / SECTION LIST ---")
         for i, (course, section) in enumerate(course_list, start=1):
@@ -164,15 +169,23 @@ class CourseraController:
         try:
             self.course_page.click(session_locator)
         except Exception as e:
-            print(f"Could not click session '{sessions[0]}': {e}")
+            print(f"ERROR: Could not click session '{sessions[0]}': {e}")
             return None
-        WebDriverWait(self.driver, 15).until(
-            EC.visibility_of_element_located(SessionPage.GRADING_TAB_BUTTON)
-        )
-        self.session_page.go_to_grading_tab()
-        self.session_page.open_gradebook_manager()
+        try:
+            WebDriverWait(self.driver, 15).until(
+                EC.visibility_of_element_located(SessionPage.GRADING_TAB_BUTTON)
+            )
+            self.session_page.go_to_grading_tab()
+            self.session_page.open_gradebook_manager()
+        except:
+            print("ERROR: Failed to navigate to the Gradebook Manager...")
+
         show_staff = input("Would you like to process staff users? (y/n): ").strip().lower()
-        headers = self.session_page.get_column_headers()
+        try:
+            headers = self.session_page.get_column_headers()
+        except:
+            print(f"ERROR: Failed to fetch column headers for course '{course}', and session '{sessions[0]}'")
+
         print(f"\n--- COLUMN HEADERS for course '{course}' (session '{sessions[0]}') ---")
         for idx, header in enumerate(headers, start=1):
             print(f"{idx}. {header}")
@@ -211,13 +224,17 @@ class CourseraController:
             except Exception as e:
                 print(f"Could not click session '{session}': {e}")
                 continue
-            self.session_page.go_to_grading_tab()
-            self.session_page.open_gradebook_manager()
-            csv_path = self.scrape_grades(course, session, col_selection)
-            if csv_path:
-                grade_files[(course, session)] = csv_path
-            for _ in range(3):
-                self.driver.back()
+            try:
+                self.session_page.go_to_grading_tab()
+                self.session_page.open_gradebook_manager()
+                csv_path = self.scrape_grades(course, session, col_selection)
+                if csv_path:
+                    grade_files[(course, session)] = csv_path
+                for _ in range(3):
+                    self.driver.back()
+            except:
+                print(f"ERROR: Failed to scrape grade data for session '{session}' of course '{course}'")
+
         return grade_files
 
     def scrape_grades(self, course, session, col_selection):
@@ -236,7 +253,11 @@ class CourseraController:
 
         selected_headers, pk_index, toggle_staff = col_selection
         if toggle_staff == "y":
-            self.session_page.toggle_staff_learners()
+            try:
+                self.session_page.toggle_staff_learners()
+            except:
+                print(f"ERROR: Failed to load staff user grade data for session '{session}' of course '{course}'")
+                
         rows = self.session_page.get_grade_rows()
         if not rows:
             print(f"No grade rows found for session '{session}'; skipping.")
