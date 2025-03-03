@@ -34,7 +34,8 @@ class CourseraController:
         self.course_page = CoursePage(self.driver)
         self.base_page = BasePage(self.driver)
         self.session_page = SessionPage(self.driver)
-        self.selected_sections = [] # will hold list of (course, session) tuples
+        self.selected_sections = [] # will hold list of (course, session, session_url) tuples
+        self.admin_dashboard_url = None
 
     def _init_driver(self, headless: bool) -> webdriver.Chrome:
         options = webdriver.ChromeOptions()
@@ -129,196 +130,197 @@ class CourseraController:
             )
         except:
             print("ERROR: Failed to locate Course Section table...")
-        
-
-    def collect_course_sections(self):
-        """scrapes available courses and sections then prompts the user to select sections to scrape"""
-
-        course_list = self.course_page.scrape_courses()
-        if not course_list:
-            print("ERROR: No courses found...")
-            return []
-        print("\n--- COURSE / SECTION LIST ---")
-        for i, (course, section) in enumerate(course_list, start=1):
-            print(f"{i}. Course: {course} | Section: {section}")
-        print("------------------------------")
-        choice = input("Enter section numbers to scrape (e.g. 1,3,5): ")
+    
+    def main_flow(self):
+        """
+        presents the static list of courses to the user and prompts for selection
+        returns a list of selected course titles.
+        """
+        self.nav_to_admin()
+        print("Successfully navigated to the Educator Admin dashboard...")
+        self.admin_dashboard_url = self.driver.current_url
+        print("\n--- Available Courses ---")
+        for i, course in enumerate(self.base_page.test_courses, start=1):
+            print(f"{i}. {course}")
+        print("-------------------------")
+        choice = input("Enter course numbers to process (comma-separated): ")
         indices = [int(x.strip()) for x in choice.split(",") if x.strip().isdigit()]
-        selected = [course_list[i - 1] for i in indices if 1 <= i <= len(course_list)]
-        print("Selected sections:")
-        for c, s in selected:
-            print(f"  Course: {c}, Section: {s}")
-        self.selected_sections = selected
-        return selected
+        selected = [self.base_page.test_courses[i - 1] for i in indices if 1 <= i <= len(self.base_page.test_courses)]
+        print("Selected courses:")
+        for course in selected:
+            print(f"  {course}")
 
-    def group_course_sessions(self, selected_sections):
-        """returns a dict mapping each course to its list of sessions"""
-        grouped = {}
-        for course, session in selected_sections:
-            grouped.setdefault(course, []).append(session)
-        return grouped
+        for course_title in selected:
+            self.process_single_course(course_title)
 
-    def collect_course_columns(self, course, sessions):
-        """
-        - for a given course it uses its first session to navigate to the gradebook manager
-        - toggles staff learners, scrapes column headers, and prompts the user to select columns and the primary key
-        - returns a tuple: (selected_headers, primary_key_full_index, show_staff)
-        """
-        print(f"\nProcessing course '{course}' using session '{sessions[0]}' for column selection.")
-        session_locator = (By.XPATH, f"//tr//a[normalize-space(text())='{sessions[0]}']")
+    def process_single_course(self, course_title: str):
+        if self.driver.current_url != self.admin_dashboard_url:
+            self.driver.get(self.admin_dashboard_url)
+        # 1) search for the given course title in the search bar
+        self.course_page.search_courses(course_title)
+
+        # 2) scrape course sessions from the list of courses that are both 'Live' and prefixed with 'prefix'
+        filtered_sessions = self.course_page.scrape_courses(prefix="CSCA") # list of tuples: (course_name, section_name, section_link)
+
+        # 3) prompt user to pick sessions to scrape
+        if not filtered_sessions:
+            print(f"No sessions were found for '{course_title}' that are both Live and prefixed with 'CSCA'...")
+            return
+        
+        print(f"\n--- Sessions for course '{course_title}' that are 'Live' + start with 'CSCA' ---")
+        for i, (c_name, s_name, s_link) in enumerate(filtered_sessions, start=1):
+            print(f"{i}. Session: {s_name} | link: {s_link}")
+        print("--------------------------------------------------------------")
+
+        choice_input = input("Enter numbers of sessions to scrape (e.g. 1,2,3): ")
+        selected_links = []
+
+        for idx_str in choice_input:
+            idx = int(idx_str)
+            if 1 <= idx <= len(filtered_sessions):
+                selected_links.append(filtered_sessions[idx - 1])
+
+        if not selected_links:
+            print(f"No sessions selected for '{course_title}'!")
+            return
+
+        # 4) for the first link in selected_links, select columns for that session
+        print(f"\nNavigating to first session link for course '{course_title}' to configure column selection...")
+        # (c_name, s_name, s_link)
+        first_session = selected_links[0]
+        fs_c, fs_s, fs_link = first_session
+
         try:
-            self.course_page.click(session_locator)
-        except Exception as e:
-            print(f"ERROR: Could not click session '{sessions[0]}': {e}")
-            return None
-        try:
+            self.driver.get(fs_link)
             WebDriverWait(self.driver, 15).until(
                 EC.visibility_of_element_located(SessionPage.GRADING_TAB_BUTTON)
+            )
+        except:
+            print("Could not find to the sessions grading tab...")
+        
+        self.session_page.go_to_grading_tab()
+        self.session_page.open_gradebook_manager()
+        show_staff = input("Would you like to show staff users in the grade table? (y/n): ").strip().lower()
+
+        headers = self.session_page.get_column_headers()
+        print(f"\n--- COLUMN HEADERS for course '{course_title}' (session '{fs_s}') ---")
+        for idx, header in enumerate(headers, start=1):
+            print(f"{idx}. {header}")
+        print("--------------------------------------------------------------")
+
+        user_input = input("Enter the numbers of columns to scrape (e.g. 1,3,5): ")
+        selected_column_indices = []
+        for token in user_input.split(","):
+            token = token.strip()
+            if token.isdigit():
+                idx = int(token)
+                if 1 <= idx <= len(headers):
+                    selected_column_indices.append(idx)
+                else:
+                    print(f"Index {idx} out of range.")
+            else:
+                print(f"Invalid input: {token}")
+        
+        while True:
+            pk_input = input("Enter the number of the column to use as the primary key: ").strip()
+            if pk_input.isdigit():
+                pk = int(pk_input)
+                if 1 <= pk <= len(selected_column_indices):
+                    # pk in the "selected" sense
+                    pk_idx_in_selected = pk - 1
+                    break
+                else:
+                    print("Input out of range. Try again.")
+            else:
+                print("Invalid input. Enter a digit.")
+        
+        # Build the needed tuple: (selected_headers, pk_full_index, show_staff)
+        selected_headers = [headers[i - 1] for i in selected_column_indices]
+        pk_full_index = headers.index(selected_headers[pk_idx_in_selected])
+        col_selection = (selected_headers, pk_full_index, show_staff)
+
+        # Now scrape the first session with these columns
+        # Then navigate back to the courses page (or do the next link).
+        self.scrape_grades_for_session(course_title, fs_s, fs_link, col_selection)
+
+        # For subsequent selected links
+        for sindex in range(1, len(selected_links)):
+            sc_c, sc_s, sc_link = selected_links[sindex]
+            self.scrape_grades_for_session(course_title, sc_s, sc_link, col_selection)
+
+        print(f"Finished scraping for course '{course_title}'.")
+
+    def scrape_grades_for_session(self, course_name, session_name, link, col_selection):
+        print(f"\nScraping session '{session_name}' at link: {link}")
+        self.driver.get(link)
+
+        try:
+            WebDriverWait(self.driver, 15).until(
+                EC.visibility_of_element_located(self.session_page.GRADING_TAB_BUTTON)
             )
             self.session_page.go_to_grading_tab()
             self.session_page.open_gradebook_manager()
         except:
-            print("ERROR: Failed to navigate to the Gradebook Manager...")
+            print(f"failed to navigate to gradebook for course '{course_name}', and session '{session_name}'...")
 
-        show_staff = input("Would you like to process staff users? (y/n): ").strip().lower()
+        (selected_headers, pk_full_index, toggle_staff) = col_selection
+        if toggle_staff == "y":
+            self.session_page.toggle_staff_learners()
+
+        # Wait for table to appear
         try:
-            headers = self.session_page.get_column_headers()
-        except:
-            print(f"ERROR: Failed to fetch column headers for course '{course}', and session '{sessions[0]}'")
-
-        print(f"\n--- COLUMN HEADERS for course '{course}' (session '{sessions[0]}') ---")
-        for idx, header in enumerate(headers, start=1):
-            print(f"{idx}. {header}")
-        print("----------------------------------------------------")
-        col_input = input("Enter numbers of columns to scrape (e.g. 1,3,5): ")
-        indices = [int(x.strip()) for x in col_input.split(",") if x.strip().isdigit()]
-        selected_headers = [headers[i - 1] for i in indices if 1 <= i <= len(headers)]
-        while True:
-            pk_input = input("Enter the number of the primary key column to use from your selections (e.g. 1): ").strip()
-            if pk_input.isdigit():
-                pk = int(pk_input)
-                if 1 <= pk <= len(selected_headers):
-                    pk_full_index = headers.index(selected_headers[pk - 1])
-                    break
-                else:
-                    print("Input out of range.")
-            else:
-                print("Invalid input.")
-        for _ in range(3):
-            self.driver.back()
-        return (selected_headers, pk_full_index, show_staff)
-
-    def process_sessions(self, course, col_selection):
-        """
-        - for a given course and its column configuration it iterates over each session,
-        - navigates to its gradebook manager view, scrapes the grade table into a CSV,
-        - returns a dict mapping (course, session) to CSV filepath
-        """
-        grade_files = {}
-        for session in self.group_course_sessions(self.selected_sections).get(course, []):
-            print(f"\nScraping grade data for session '{session}' of course '{course}'...")
-            session_locator = (By.XPATH, f"//tr//a[normalize-space(text())='{session}']")
-            try:
-                self.course_page.expand_all_sections()
-                self.course_page.click(session_locator)
-            except Exception as e:
-                print(f"Could not click session '{session}': {e}")
-                continue
-            try:
-                self.session_page.go_to_grading_tab()
-                self.session_page.open_gradebook_manager()
-                csv_path = self.scrape_grades(course, session, col_selection)
-                if csv_path:
-                    grade_files[(course, session)] = csv_path
-                for _ in range(3):
-                    self.driver.back()
-            except:
-                print(f"ERROR: Failed to scrape grade data for session '{session}' of course '{course}'")
-
-        return grade_files
-
-    def scrape_grades(self, course, session, col_selection):
-        """
-        - for the given course and session, using the provided column configuration,
-        - waits for the grade table to appear then filters rows for the selected columns
-        - writes the data to a CSV file and returns the filepath
-        """
-        try:
-            WebDriverWait(self.driver, 30).until(
+            WebDriverWait(self.driver, 15).until(
                 EC.presence_of_element_located((By.XPATH, "//table//tbody"))
             )
-        except Exception as e:
-            print(f"Grade table not found for session '{session}'.")
-            return None
+        except:
+            print(f"Could not locate table body for session '{session_name}'; skipping.")
+            return
 
-        selected_headers, pk_index, toggle_staff = col_selection
-        if toggle_staff == "y":
-            try:
-                self.session_page.toggle_staff_learners()
-            except:
-                print(f"ERROR: Failed to load staff user grade data for session '{session}' of course '{course}'")
-                
+        # get rows
         rows = self.session_page.get_grade_rows()
         if not rows:
-            print(f"No grade rows found for session '{session}'; skipping.")
-            return None
+            print(f"No grade rows found for session '{session_name}'; skipping.")
+            return
+
+        # get full headers
         full_headers = self.session_page.get_column_headers()
+
+        # map user-chosen 'selected_headers' to indices in full_headers
         selected_indices = []
-        for sel in selected_headers:
+        for sh in selected_headers:
             try:
-                idx = full_headers.index(sel)
+                idx = full_headers.index(sh)
                 selected_indices.append(idx)
             except ValueError:
-                print(f"Warning: Header '{sel}' not found for session '{session}'.")
-        if pk_index in selected_indices:
-            selected_indices.remove(pk_index)
-        selected_indices.insert(0, pk_index)
+                print(f"Warning: Header '{sh}' not found in session '{session_name}' table.")
+        if pk_full_index in selected_indices:
+            selected_indices.remove(pk_full_index)
+        selected_indices.insert(0, pk_full_index)
+
+        # filter each row
         data_rows = []
         for row in rows:
             filtered = [row[i] if i < len(row) else "" for i in selected_indices]
             data_rows.append(filtered)
-        if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
-        else:
-            base_dir = os.path.dirname(__file__)
+
+        # final output path
+        base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(__file__)
         output_dir = os.path.join(base_dir, "Coursera-Gradebooks")
         os.makedirs(output_dir, exist_ok=True)
-        filename = f"Coursera Gradebook - {BasePage.sanitize_filename(session)} - {BasePage.sanitize_filename(course)}.csv"
+        filename = f"Coursera Gradebook - {BasePage.sanitize_filename(session_name)} - {BasePage.sanitize_filename(course_name)}.csv"
         filepath = os.path.join(output_dir, filename)
-        with open(filepath, "w", newline="", encoding="utf-8") as csvfile:
-            writer = csv.writer(csvfile)
+        with open(filepath, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
             header_row = [full_headers[i] if i < len(full_headers) else "" for i in selected_indices]
             writer.writerow(header_row)
             writer.writerows(data_rows)
-        print(f"Saved grade data for session '{session}' to {filepath}")
-        return filepath
 
-    def process_courses(self):
-        """
-        the main workflow method
-        - navigates to the admin dashboard, collects course sections,
-        - groups them by course and for each course:
-          1. configures column selection (and staff toggle) using the first session
-          2. processes each session by scraping its grade data into a CSV
-        returns a dictionary mapping (course, session) to CSV filepath
-        """
-        self.nav_to_admin()
-        self.collect_course_sections()
-        grouped = self.group_course_sessions(self.selected_sections)
-        overall_grade_files = {}
-        for course, sessions in grouped.items():
-            col_selection = self.collect_course_columns(course, sessions)
-            if not col_selection:
-                continue
-            grade_files = self.process_sessions(course, col_selection)
-            overall_grade_files.update(grade_files)
-        return overall_grade_files
-
+        print(f"Saved session '{session_name}' data to {filepath}.")
 
 def main():
     controller = CourseraController()
     controller.perform_login()
-    grade_files = controller.process_courses()
+    controller.main_flow()
 
 if __name__ == "__main__":
     main()
