@@ -5,14 +5,13 @@ import os
 # -------------------------------
 # Data Models and CSV Loaders
 # -------------------------------
-
 class StudentRecord:
     def __init__(self, student_id, first_name, last_name, email, assessments):
-        self.student_id = student_id      #
-        self.first_name = first_name     
-        self.last_name = last_name        
-        self.email = email                
-        self.assessments = assessments    
+        self.student_id = student_id
+        self.first_name = first_name
+        self.last_name = last_name
+        self.email = email
+        self.assessments = assessments
 
 def load_gradebook(file_path):
     records = {}
@@ -66,11 +65,9 @@ def load_dummy_registrar_data():
         "12345": StudentRecord("12345", "Alice", "Smith", "alice@example.com", {"Letter Grade": "B"}),
     }
     return dummy_records
-
 # -------------------------------
 # Discrepancy Logic
 # -------------------------------
-
 def evaluate_grade_discrepancy(old_grade, new_grade, honor_quiz_completed):
     if old_grade != 'W':
         if new_grade == old_grade:
@@ -110,40 +107,65 @@ def compare_records(coursera_data, registrar_data):
                     'old_grade': old_grade,
                     'new_grade': new_grade,
                     'final_grade': result['final_grade'],
-                    'note': result['note']
+                    'note': result['note'],
+                    'record': record  
                 }
     return discrepancies
 
+def consolidate_grade_changes(coursera_data, registrar_data):
+    """
+    Returns a list of grade change dictionaries to be used in generating the final B3 file.
+    """
+    discrepancies = compare_records(coursera_data, registrar_data)
+    changes = []
+    for student_id, info in discrepancies['grade_discrepancies'].items():
+        record = info['record']
+        change = {
+            'student_id': student_id,
+            'first_name': record.first_name,
+            'last_name': record.last_name,
+            'course_subject': record.assessments.get('subject', ''),
+            'course_number': record.assessments.get('catalog', ''),
+            'section': record.assessments.get('section', ''),
+            'crn': record.assessments.get('class_nbr', ''),
+            'old_grade': info['old_grade'],
+            'new_grade': info['new_grade']
+        }
+        changes.append(change)
+    return changes
+
 def resolve_discrepancy(discrepancy):
     print("Resolving discrepancy:", discrepancy)
-
 # -------------------------------
-# Main Execution Block
+# Main Execution Block (For testing within this module)
 # -------------------------------
-
 if __name__ == "__main__":
-    # UPDATEE
-    coursera_csv_path = "dummy_coursera_data.csv"
+    # UPDATE WITH REAL PATHS IF AVAILABLE
+    coursera_csv_path = "../dummy_coursera_data.csv"
     registrar_csv_path = "path/to/Registrar_Gradebook.csv"
 
     if os.path.exists(coursera_csv_path):
         coursera_data = load_gradebook(coursera_csv_path)
     else:
-        print(f"{coursera_csv_path} not found. Please generate the dummy data.")
+        print(f"{coursera_csv_path} not found.")
         coursera_data = None
 
     try:
         if os.path.exists(registrar_csv_path):
             registrar_data = load_registrar_data_pd(registrar_csv_path)
         else:
-            print(f"{registrar_csv_path} not found. Using dummy registrar data.")
+            print(f"{registrar_csv_path} not found.")
             registrar_data = load_dummy_registrar_data()
     except Exception as e:
         print("Error loading registrar data:", e)
         registrar_data = load_dummy_registrar_data()
 
     if coursera_data is not None:
+        changes = consolidate_grade_changes(coursera_data, registrar_data)
+        print("Consolidated grade changes:", changes)
+        # Optionally resolve discrepancies one by one (if needed)
         discrepancies = compare_records(coursera_data, registrar_data)
-        print("Discrepancies found:", discrepancies)
         for key, value in discrepancies.items():
             resolve_discrepancy({key: value})
+    else:
+        print("No Coursera data to process.")
