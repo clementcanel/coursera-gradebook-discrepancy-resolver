@@ -11,7 +11,7 @@ from email.mime.text import MIMEText
 # Doing this requires 2 factor authentication to be active on your account, you can activate it at https://myaccount.google.com/signinoptions/twosv
 
 #attachment_names: list of filepaths attachment to attachments in the email leave blank for none
-def gen_email(attachment_names):
+def gen_email(attachment_names, receiver_email):
     smtp_server = "smtp.gmail.com"
     port = 587
     sender_email = "courseratestemail14@gmail.com"
@@ -62,4 +62,4 @@ def gen_email(attachment_names):
         server.quit()
 
 
-gen_email(["selenium_login.py","couseraWrapper.py"])
+gen_email(["selenium_login.py","couseraWrapper.py"], "courseratestemail14@gmail.com")
