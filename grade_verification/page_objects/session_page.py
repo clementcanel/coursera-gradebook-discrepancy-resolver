@@ -2,6 +2,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from grade_verification.page_objects.base_page import BasePage
+import os
 
 class SessionPage(BasePage):
     # locator for the grading tab button
@@ -16,8 +17,6 @@ class SessionPage(BasePage):
     
     def go_to_grading_tab(self):
         """clicks on the grading tab and waits until the gradebook manager link is visible"""
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
 
         # wait up to 15 seconds for the grading tab to be clickable and get the element
         grading_tab = WebDriverWait(self.driver, 15, poll_frequency=0.5).until(
@@ -32,31 +31,28 @@ class SessionPage(BasePage):
         try:
             grading_tab.click()
         except Exception as e:
-            print("Direct click on Grading tab failed, falling back to click:", e)
+            print(e)
             self.click(self.GRADING_TAB_BUTTON, timeout=15)
-        
-        # wait until the gradebook manager link is visible
-        WebDriverWait(self.driver, 15, poll_frequency=0.5).until(
-            EC.visibility_of_element_located(self.GRADEBOOK_MANAGER_LINK)
-        )
-        self.sleep(1)
+
     
     def open_gradebook_manager(self):
         """clicks on the gradebook manager link in the sidebar and waits for the grade table to load"""
+        # wait until the gradebook manager link is visible
+        manager_tab = WebDriverWait(self.driver, 15, poll_frequency=0.5).until(
+            EC.element_to_be_clickable(self.GRADEBOOK_MANAGER_LINK)
+        )
 
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
+        # scroll the element into view
+        self.driver.execute_script("arguments[0].scrollIntoView(true);", manager_tab)
+        self.sleep(0.5)  # brief pause to allow scrolling/animation to complete
+
+        # attempt a direct click
         try:
-            # wait up to 15 seconds for the gradebook manager link to be present
-            WebDriverWait(self.driver, 15, poll_frequency=0.5).until(
-                EC.presence_of_element_located(self.GRADEBOOK_MANAGER_LINK)
-            )
+            manager_tab.click()
         except Exception as e:
-            print(f"DEBUG: Could not find Gradebook Manager link.")
-            raise e
+            print(e)
+            self.click(self.GRADEBOOK_MANAGER_LINK, timeout=15)
 
-        # now attempt to click it with an extended timeout
-        self.click(self.GRADEBOOK_MANAGER_LINK, timeout=15)
         self.sleep(3)
 
     def toggle_staff_learners(self, show_staff=True):

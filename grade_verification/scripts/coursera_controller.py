@@ -25,6 +25,7 @@ class CourseraController:
            - processing each session to scrape grade data and output a CSV file
     """
     def __init__(self):
+        os.system('cls' if os.name == 'nt' else 'clear')
         print("1) Begining setup for CU MS-CS Coursera Grade Scraper...")
         print("--------------------------------------------------------\n")
         # init the driver in headless mode by default
@@ -32,7 +33,16 @@ class CourseraController:
         # init page objects with the current driver
         self.home_page = HomePage(self.driver)
         self.course_page = CoursePage(self.driver)
+        # load base page, and tester mode toggle
         self.base_page = BasePage(self.driver)
+        test_selection = input("Are you testing on dummy courses? (enter y/n):")
+        if test_selection == "y":
+            self.course_list = self.base_page.test_courses
+            self.testing = True
+        else:
+            self.course_list = self.base_page.courses
+            self.testing = False
+
         self.session_page = SessionPage(self.driver)
         self.selected_sections = [] # will hold list of (course, session, session_url) tuples
         self.admin_dashboard_url = None
@@ -89,7 +99,7 @@ class CourseraController:
         print("3) Chrome login window opened. You have 2 minutes to log in...")
         try:
             WebDriverWait(visible_driver, 120).until(lambda d: temp_home.is_logged_in())
-            print("User successfully logged in...")
+            print("   User successfully logged in...")
         except Exception as e:
             print("ERROR: No login was detected on visible driver...")
             return
@@ -132,20 +142,25 @@ class CourseraController:
             print("ERROR: Failed to locate Course Section table...")
     
     def main_flow(self):
+        self.perform_login()
         """
         presents the static list of courses to the user and prompts for selection
         returns a list of selected course titles.
         """
         self.nav_to_admin()
+        if not self.testing:
+            os.system('cls' if os.name == 'nt' else 'clear')
         print("Successfully navigated to the Educator Admin dashboard...")
         self.admin_dashboard_url = self.driver.current_url
         print("\n--- Available Courses ---")
-        for i, course in enumerate(self.base_page.test_courses, start=1):
+        for i, course in enumerate(self.course_list, start=1):
             print(f"{i}. {course}")
         print("-------------------------")
         choice = input("Enter course numbers to process (comma-separated): ")
         indices = [int(x.strip()) for x in choice.split(",") if x.strip().isdigit()]
-        selected = [self.base_page.test_courses[i - 1] for i in indices if 1 <= i <= len(self.base_page.test_courses)]
+        selected = [self.course_list[i - 1] for i in indices if 1 <= i <= len(self.course_list)]
+        if not self.testing:
+            os.system('cls' if os.name == 'nt' else 'clear')
         print("Selected courses:")
         for course in selected:
             print(f"  {course}")
@@ -190,17 +205,11 @@ class CourseraController:
         first_session = selected_links[0]
         fs_c, fs_s, fs_link = first_session
 
-        try:
-            self.driver.get(fs_link)
-            WebDriverWait(self.driver, 15).until(
-                EC.visibility_of_element_located(SessionPage.GRADING_TAB_BUTTON)
-            )
-        except:
-            print("Could not find to the sessions grading tab...")
         
-        self.session_page.go_to_grading_tab()
-        self.session_page.open_gradebook_manager()
-        show_staff = input("Would you like to show staff users in the grade table? (y/n): ").strip().lower()
+        self.driver.get(fs_link)
+        self.base_page.sleep(2)
+        if not self.testing:
+            os.system('cls' if os.name == 'nt' else 'clear')
 
         headers = self.session_page.get_column_headers()
         print(f"\n--- COLUMN HEADERS for course '{course_title}' (session '{fs_s}') ---")
@@ -223,24 +232,32 @@ class CourseraController:
         
         while True:
             pk_input = input("Enter the number of the column to use as the primary key: ").strip()
-            if pk_input.isdigit():
-                pk = int(pk_input)
-                if 1 <= pk <= len(selected_column_indices):
+            if pk_input.isdigit() and int(pk_input) in selected_column_indices:
                     # pk in the "selected" sense
-                    pk_idx_in_selected = pk - 1
+                    pk_primary = int(pk_input) - 1
                     break
-                else:
-                    print("Input out of range. Try again.")
             else:
-                print("Invalid input. Enter a digit.")
+                print("Invalid input. Please enter the number assigned to one of your selected columns.")
+
+        while True:
+            ppq_input = input("Enter the number of the column that denotes program policy quiz completion: ").strip()
+            if ppq_input.isdigit() and int(ppq_input) in selected_column_indices:
+                    # pk in the "selected" sense
+                    ppq_primary = int(ppq_input) - 1
+                    break
+            else:
+                print("Invalid input. Please enter the number assigned to one of your selected columns.")
         
-        # Build the needed tuple: (selected_headers, pk_full_index, show_staff)
-        selected_headers = [headers[i - 1] for i in selected_column_indices]
-        pk_full_index = headers.index(selected_headers[pk_idx_in_selected])
-        col_selection = (selected_headers, pk_full_index, show_staff)
+        # Build the needed tuple: (selected_headers, pk_full_index)
+        selected_headers = [headers[i - 1] for i in list(selected_column_indices)]
+        pk_full_index = headers.index(selected_headers[pk_primary])
+        ppq_full_index = headers.index(selected_headers[ppq_primary])
+        col_selection = (selected_headers, pk_full_index, ppq_full_index)
 
         # Now scrape the first session with these columns
         # Then navigate back to the courses page (or do the next link).
+        if not self.testing:
+            os.system('cls' if os.name == 'nt' else 'clear')
         self.scrape_grades_for_session(course_title, fs_s, fs_link, col_selection)
 
         # For subsequent selected links
@@ -254,17 +271,8 @@ class CourseraController:
         print(f"\nScraping session '{session_name}' at link: {link}")
         self.driver.get(link)
 
-        try:
-            WebDriverWait(self.driver, 15).until(
-                EC.visibility_of_element_located(self.session_page.GRADING_TAB_BUTTON)
-            )
-            self.session_page.go_to_grading_tab()
-            self.session_page.open_gradebook_manager()
-        except:
-            print(f"failed to navigate to gradebook for course '{course_name}', and session '{session_name}'...")
-
-        (selected_headers, pk_full_index, toggle_staff) = col_selection
-        if toggle_staff == "y":
+        (selected_headers, pk_full_index, ppq_full_index) = col_selection
+        if self.testing:
             self.session_page.toggle_staff_learners()
 
         # Wait for table to appear
@@ -272,7 +280,7 @@ class CourseraController:
             WebDriverWait(self.driver, 15).until(
                 EC.presence_of_element_located((By.XPATH, "//table//tbody"))
             )
-        except:
+        except Exception as e:
             print(f"Could not locate table body for session '{session_name}'; skipping.")
             return
 
@@ -296,6 +304,8 @@ class CourseraController:
         if pk_full_index in selected_indices:
             selected_indices.remove(pk_full_index)
         selected_indices.insert(0, pk_full_index)
+        if ppq_full_index in selected_indices:
+            full_headers[ppq_full_index] = "Policy Quiz"
 
         # filter each row
         data_rows = []
@@ -303,23 +313,72 @@ class CourseraController:
             filtered = [row[i] if i < len(row) else "" for i in selected_indices]
             data_rows.append(filtered)
 
+        # Build header row from selected indices
+        header_row = [full_headers[i] if i < len(full_headers) else "" for i in selected_indices]
+
+        # If in testing mode and there is a "Name" column, split it and add Student ID
+        if self.testing and "Name" in header_row:
+            name_idx = header_row.index("Name")
+            # Remove "Name" and insert "First Name" and "Last Name" at its position
+            header_row.pop(name_idx)
+            header_row.insert(name_idx, "Last Name")
+            header_row.insert(name_idx, "First Name")
+            # Append Student ID column at the end
+            header_row.append("Student ID")
+
+            # Prepare a dictionary to assign unique IDs per unique name
+            student_ids = {}
+            next_student_id = 100000001
+
+            # Process each data row accordingly
+            new_data_rows = []
+            for row in data_rows:
+                # Extract the original name value from the appropriate column
+                original_name = row[name_idx] if name_idx < len(row) else ""
+                # Simple split: first token as first name, last token as last name
+                if original_name.strip():
+                    parts = original_name.strip().split()
+                    first_name = parts[0]
+                    last_name = parts[-1] if len(parts) > 1 else ""
+                else:
+                    first_name, last_name = "", ""
+                # Remove the original "Name" entry and insert first and last names
+                row.pop(name_idx)
+                row.insert(name_idx, first_name)
+                row.insert(name_idx + 1, last_name)
+                # Assign a unique student ID for this name
+                if original_name not in student_ids:
+                    student_ids[original_name] = next_student_id
+                    next_student_id += 1
+                row.append(str(student_ids[original_name]))
+                new_data_rows.append(row)
+            data_rows = new_data_rows
+
+        # Add new column "catalog" from the session_name (assumes session_name.split() returns at least 2 tokens)
+        session_title_parts = session_name.split()
+        catalog_value = session_title_parts[1] if len(session_title_parts) > 1 else ""
+        header_row.append("Catalog No.")
+        for row in data_rows:
+            row.append(catalog_value)
+
         # final output path
         base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(__file__)
         output_dir = os.path.join(base_dir, "Coursera-Gradebooks")
         os.makedirs(output_dir, exist_ok=True)
-        filename = f"Coursera Gradebook - {BasePage.sanitize_filename(session_name)} - {BasePage.sanitize_filename(course_name)}.csv"
+        filename = f"Coursera_Gradebook_{BasePage.sanitize_filename(session_title_parts[1])}_{BasePage.sanitize_filename(session_title_parts[0])}.csv"
         filepath = os.path.join(output_dir, filename)
         with open(filepath, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            header_row = [full_headers[i] if i < len(full_headers) else "" for i in selected_indices]
             writer.writerow(header_row)
             writer.writerows(data_rows)
+        if not self.testing:
+            os.system('cls' if os.name == 'nt' else 'clear')
 
         print(f"Saved session '{session_name}' data to {filepath}.")
 
+
 def main():
     controller = CourseraController()
-    controller.perform_login()
     controller.main_flow()
 
 if __name__ == "__main__":

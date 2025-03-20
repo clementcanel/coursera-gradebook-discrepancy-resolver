@@ -33,8 +33,8 @@ class CoursePage(BasePage):
 
 
     def scrape_courses(self, prefix):
-        courses_data = [] # holds tuples of course sessions (course_title, session_title, session_link)
-        self.expand_all_sections() # expands all hidden sessions
+        courses_data = []  # holds tuples of course sessions (course_title, session_title, session_link)
+        self.expand_all_sections()  # expands all hidden sessions
 
         # finds the table body, and extracts rows
         table_body = self.driver.find_element(*self.TABLE_BODY_LOCATOR)
@@ -46,15 +46,15 @@ class CoursePage(BasePage):
             tds = row.find_elements(By.TAG_NAME, "td")
             if len(tds) < 2:
                 continue
-            
+
             # finds course overview link, extracts the course name
             course_anchors = tds[0].find_elements(By.TAG_NAME, "a")
             if course_anchors:
                 current_course_name = course_anchors[0].text.strip()
 
-            section_name = None # holds the current section name
-            section_link = None # holds the current section link
-            isLive = False # tells us if the section is live or not
+            section_name = None  # holds the current section name
+            section_link = None  # holds the current section link
+            isLive = False  # tells us if the section is live or not
 
             # finds the course section link, and section spans
             section_anchors = tds[1].find_elements(By.TAG_NAME, "a")
@@ -74,8 +74,10 @@ class CoursePage(BasePage):
                     print(f"{section_name} did not match {prefix}")
                     continue
                 section_link = section_anchors[0].get_attribute("href")
+                # Replace the '/content/edit/' suffix with '/grading/gradebook/'
+                section_link = section_link.replace("/content/edit", "/grading/gradebook")
 
             if current_course_name and section_name:
                 courses_data.append((current_course_name, section_name, section_link))
-
+        print(courses_data)
         return courses_data
