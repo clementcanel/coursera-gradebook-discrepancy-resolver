@@ -29,10 +29,16 @@ jobs:
       - name: Install Poetry
         run: curl -sSL https://install.python-poetry.org | python -
 
+      - name: Testing Poetry
+        run: poetry --version
+
       - name: Configure Poetry
         run: |
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          poetry config virtualenvs.create false
+          if [[ "${{ runner.os }}" == 'Windows' ]]; then
+            echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
+          else
+            echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
+          fi
 
       - name: Install Dependencies
         run: poetry install
