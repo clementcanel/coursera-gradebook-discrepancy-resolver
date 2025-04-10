@@ -19,7 +19,7 @@ jobs:
         os: [windows-latest, macos-latest]
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v2
@@ -49,7 +49,7 @@ jobs:
           fi
 
       - name: Upload Executable
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: executable-${{ matrix.os }}-${{ env.PROJECT_VERSION }}
           path: dist/coursera-scraper-${{ env.PROJECT_VERSION }}-*
