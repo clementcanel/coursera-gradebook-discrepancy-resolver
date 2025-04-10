@@ -33,10 +33,10 @@ jobs:
 
       - name: Configure Poetry
         run: |
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            echo "PATH=$HOME/.poetry/bin:$PATH" >> $GITHUB_ENV
+          if [[ "${{ runner.os }}" == 'Windows' ]]; then
+            echo "PATH=$env:USERPROFILE\.poetry\bin;$env:PATH" >> $GITHUB_ENV
           else
-            echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
+            echo "PATH=$HOME/.poetry/bin:$PATH" >> $GITHUB_ENV
           fi
 
       - name: Install Dependencies
