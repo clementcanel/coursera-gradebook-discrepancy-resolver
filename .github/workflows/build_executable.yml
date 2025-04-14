@@ -21,6 +21,7 @@ jobs:
       - name: Extract version from file
         id: get_version
         run: echo "version=$(cat ./VERSION)" >> $GITHUB_OUTPUT
+        shell: bash
 
       - name: Set up Python
         uses: actions/setup-python@v2
