@@ -31,14 +31,15 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install poetry
 
-      - name: Configure Poetry
+      - name: Configure Poetry for Windows
+        if: runner.os == 'Windows'
         run: |
-          if (${{ runner.os }} -eq 'Windows') {
-            echo "PATH=$env:USERPROFILE\.poetry\bin;$env:PATH" >> $GITHUB_ENV
-          } else {
-            echo "PATH=$HOME/.poetry/bin:$PATH" >> $GITHUB_ENV
-          }
-        shell: pwsh
+          echo "PATH=$env:USERPROFILE\.poetry\bin;$env:PATH" >> $GITHUB_ENV
+
+      - name: Configure Poetry for Mac
+        if: runner.os == 'macOS'
+        run: |
+          echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
 
       - name: Install Dependencies
         run: poetry install
