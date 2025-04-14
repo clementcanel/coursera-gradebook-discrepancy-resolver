@@ -45,19 +45,19 @@ jobs:
         run: poetry install
 
       - name: Build Executable with PyInstaller
-        run: poetry run pyinstaller --onefile --name coursera-scraper-${{ env.PROJECT_VERSION }} grade_verification/scripts/coursera_controller.py
+        run: poetry run pyinstaller --onefile --name coursera-scraper-${{ steps.get_version.outputs.version }} grade_verification/scripts/coursera_controller.py
 
       - name: Rename Executable for OS
         run: |
           if [ "${{ runner.os }}" == "Windows" ]; then
-            mv dist/coursera-scraper-${{ env.PROJECT_VERSION }}.exe dist/coursera-scraper-${{ env.PROJECT_VERSION }}-win.exe
+            mv dist/coursera-scraper-${{ steps.get_version.outputs.version }}.exe dist/coursera-scraper-${{ steps.get_version.outputs.version }}-win.exe
           else
-            mv dist/coursera-scraper-${{ env.PROJECT_VERSION }} dist/coursera-scraper-${{ env.PROJECT_VERSION }}-mac
+            mv dist/coursera-scraper-${{ steps.get_version.outputs.version }} dist/coursera-scraper-${{ steps.get_version.outputs.version }}-mac
           fi
         shell: bash
 
       - name: Upload Executable
         uses: actions/upload-artifact@v4
         with:
-          name: executable-${{ matrix.os }}-${{ env.PROJECT_VERSION }}
-          path: dist/coursera-scraper-${{ env.PROJECT_VERSION }}-*
+          name: executable-${{ matrix.os }}-${{ steps.get_version.outputs.version }}
+          path: dist/coursera-scraper-${{ steps.get_version.outputs.version }}-*
