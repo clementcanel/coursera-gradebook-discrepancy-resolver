@@ -78,7 +78,7 @@ jobs:
           path: dist
 
       - name: Check downloaded artifacts
-        run: ls -R dist
+        run: ls -al
 
       - name: Create Release & Upload Assets
         uses: softprops/action-gh-release@v2
