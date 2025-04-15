@@ -1,6 +1,9 @@
-name: Build Python Executables
+name: Publish Artifacts as Release (on PR merge)
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -54,8 +57,34 @@ jobs:
           fi
         shell: bash
 
-      - name: Upload Executable
-        uses: actions/upload-artifact@v4
+#      - name: Upload Executable
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: executable-${{ matrix.os }}-${{ steps.get_version.outputs.version }}
+#          path: dist/coursera-scraper-${{ steps.get_version.outputs.version }}-*
+
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from file
+        id: get_version
+        run: echo "version=$(cat ./VERSION)" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - uses: actions/download-artifact@v4
         with:
-          name: executable-${{ matrix.os }}-${{ steps.get_version.outputs.version }}
-          path: dist/coursera-scraper-${{ steps.get_version.outputs.version }}-*
+          path: dist
+
+      - name: Check downloaded artifacts
+        run: ls -R dist
+
+      - name: Create Release & Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: "Release v${{ steps.get_version.outputs.version }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
