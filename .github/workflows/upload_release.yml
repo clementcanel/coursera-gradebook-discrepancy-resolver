@@ -64,6 +64,7 @@ jobs:
           path: dist/coursera-scraper-${{ steps.get_version.outputs.version }}-*
 
   publish:
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
