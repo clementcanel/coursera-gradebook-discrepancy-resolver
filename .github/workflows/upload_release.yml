@@ -57,11 +57,11 @@ jobs:
           fi
         shell: bash
 
-#      - name: Upload Executable
-#        uses: actions/upload-artifact@v4
-#        with:
-#          name: executable-${{ matrix.os }}-${{ steps.get_version.outputs.version }}
-#          path: dist/coursera-scraper-${{ steps.get_version.outputs.version }}-*
+      - name: Upload Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: executable-${{ matrix.os }}-${{ steps.get_version.outputs.version }}
+          path: dist/coursera-scraper-${{ steps.get_version.outputs.version }}-*
 
   publish:
     runs-on: ubuntu-latest
