@@ -87,6 +87,12 @@ jobs:
       - name: Check downloaded artifacts
         run: ls -al dist/
 
+      - name: Flatten artifacts directory
+        run: |
+          mkdir dist_flat
+          find dist/ -type f -exec mv {} dist_flat/ \;
+          ls -al dist_flat/
+
       - name: Create Release & Upload Assets
         uses: softprops/action-gh-release@v2
         with:
