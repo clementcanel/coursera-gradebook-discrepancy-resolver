@@ -78,8 +78,11 @@ jobs:
         with:
           path: dist
 
-      - name: Check downloaded artifacts
+      - name: Debugging files
         run: ls -al
+
+      - name: Check downloaded artifacts
+        run: ls -al dist/
 
       - name: Create Release & Upload Assets
         uses: softprops/action-gh-release@v2
