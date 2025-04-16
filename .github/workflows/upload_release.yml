@@ -93,10 +93,13 @@ jobs:
           find dist/ -type f -exec mv {} dist_flat/ \;
           ls -al dist_flat/
 
+      - name: Debugging flattened directory
+        run: ls -al dist_flat/
+
       - name: Create Release & Upload Assets
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*
+          files: dist_flat/*
           tag_name: v${{ steps.get_version.outputs.version }}
           name: "Release v${{ steps.get_version.outputs.version }}"
         env:
