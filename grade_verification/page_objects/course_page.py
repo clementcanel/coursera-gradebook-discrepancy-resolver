@@ -8,15 +8,19 @@ class CoursePage(BasePage):
     SEARCH_BAR_LOCATOR = (By.XPATH, "//input[@placeholder='Search']")
 
     def expand_all_sections(self):
-        while True:
-            buttons = self.driver.find_elements(*self.SHOW_MORE_BUTTON_LOCATOR)
-            if not buttons:
-                break
-            for btn in buttons:
+        buttons = self.driver.find_elements(*self.SHOW_MORE_BUTTON_LOCATOR)
+        if not buttons:
+            return
+        expands = 0
+        for btn in buttons:
+            if expands < 5:
+                expands += 1
                 try:
                     self.driver.execute_script("arguments[0].click();", btn)
                 except NoSuchElementException:
                     continue
+            else:
+                return
 
     def search_courses(self, course_name: str):
         """
@@ -32,7 +36,7 @@ class CoursePage(BasePage):
         self.sleep(1)  # brief pause to let the list update
 
 
-    def scrape_courses(self, prefix):
+    def scrape_courses(self, prefix, archiveToggle, isTesting):
         courses_data = []  # holds tuples of course sessions (course_title, session_title, session_link)
         self.expand_all_sections()  # expands all hidden sessions
 
@@ -54,15 +58,18 @@ class CoursePage(BasePage):
 
             section_name = None  # holds the current section name
             section_link = None  # holds the current section link
-            isLive = False  # tells us if the section is live or not
+            isLive = archiveToggle  # tells us if the section is live or not
 
             # finds the course section link, and section spans
             section_anchors = tds[1].find_elements(By.TAG_NAME, "a")
             section_spans = tds[1].find_elements(By.TAG_NAME, "span")
             # for each span, determine if any of them contain the text 'Live'
+            status = 'Live'
             for span in section_spans:
                 if span.text.strip() == "Live":
                     isLive = True
+                if span.text.strip() == 'Archived':
+                    status = 'Archived'
             # if none are marked as Live then there are no more live sessions, and we can return
             if isLive == False:
                 return courses_data
@@ -70,14 +77,13 @@ class CoursePage(BasePage):
             if section_anchors:
                 section_name = section_anchors[0].text.strip()
                 # if the section name is not prefixed with the given prefix then skip this row
-                if not section_name.startswith(prefix):
-                    print(f"{section_name} did not match {prefix}")
-                    continue
+                if not isTesting:
+                    if not section_name.startswith(prefix):
+                        continue
                 section_link = section_anchors[0].get_attribute("href")
                 # Replace the '/content/edit/' suffix with '/grading/gradebook/'
                 section_link = section_link.replace("/content/edit", "/grading/gradebook")
 
-            if current_course_name and section_name:
-                courses_data.append((current_course_name, section_name, section_link))
-        print(courses_data)
+            if current_course_name and section_name and section_link:
+                courses_data.append((current_course_name, section_name, section_link, status))
         return courses_data

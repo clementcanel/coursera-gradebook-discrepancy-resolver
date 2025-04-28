@@ -14,15 +14,3 @@ class HomePage(BasePage):
     def click_login(self):
         self.click(self.LOGIN_SELECTOR)
 
-    def scrape_courses(self):
-        """clicks the profile button and then the 'educator admin' link using explicit waits"""
-        
-        # click the profile button
-        self.click(self.PROFILE_BUTTON_SELECTOR)
-        # wait until the admin link is clickable
-        WebDriverWait(self.driver, 5, poll_frequency=0.5).until(
-            EC.element_to_be_clickable(self.ADMIN_BUTTON_SELECTOR)
-        )
-        self.click(self.ADMIN_BUTTON_SELECTOR)
-
-        return

@@ -3,8 +3,10 @@
 import os
 import sys
 import glob
+import copy
 import csv
 import re
+import time
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl import load_workbook  # if needed for further manipulations
@@ -21,7 +23,10 @@ class LoadData:
     """
 
     def __init__(self):
-        print("PHASE: 2 - Data Manipulation")
+        print("\n -------------------------------------------------------------------------")
+        print(" ----  ✨" + "\033[1m" + " Grade scraping Complete! Begining discrepancy flagging." + "\033[0m" + " ✨  ----")
+        print(" -------------------------------------------------------------------------")
+        time.sleep(2)
 
     def evaluate_grade_discrepancies(self, df):
         """
@@ -33,18 +38,18 @@ class LoadData:
             * If New Grade is lower than Old Grade: discrepancy and change to New Grade & not expected.
             
         - For Old Grade 'W':
-            * If New Grade is non-'W' and the Policy Quiz is completed (i.e. not empty): discrepancy and change to New Grade.
-            * If New Grade is non-'W' but the Policy Quiz is not completed: discrepancy and keep Old Grade.
+            * If New Grade is non-'W' and the Honor Quiz is completed (i.e. not empty): discrepancy and change to New Grade.
+            * If New Grade is non-'W' but the Honor Quiz is not completed: discrepancy and keep Old Grade.
             
         The function returns a DataFrame that only includes rows with discrepancies. It adds two new columns,
         'Program' (with the value "MEEM") and 'Action' (with the value "Grade Correction"), inserted between
         the 'Career' and 'Old Grade' columns. It also replaces the 'Notes' column with a message describing
-        the discrepancy type and removes the 'Policy Quiz' column.
+        the discrepancy type and removes the 'Honor Quiz' column.
         
         Expected input DataFrame column order:
         ['Student ID', 'Last Name', 'First Name', 'Term', 'Class Number', 'Institution', 
         'Career', 'Old Grade', 'New Grade', 'Class Subject', 'Catalog No.', 'Section', 
-        'Notes', 'Policy Quiz']
+        'Notes', 'Honor Quiz']
         
         Returns:
             A DataFrame filtered to only rows with discrepancies and updated as described.
@@ -53,9 +58,9 @@ class LoadData:
         grade_mapping = {'A': 10, 'A-': 9, 'B+': 8, 'B': 7, 'B-': 6, 'C+': 6, 'C': 5, 'C-': 4,'D+': 3, 'D': 3, 'D-': 2, 'F': 1}
         
         def process_row(row):
-            old_grade = row['Old Grade']
-            new_grade = row['New Grade']
-            quiz = row['Policy Quiz']
+            old_grade = row['old grade']
+            new_grade = row['new grade']
+            quiz = row['honor quiz']
             
             # Case 1: Old Grade is not 'W'
             if old_grade != 'W':
@@ -79,7 +84,7 @@ class LoadData:
             else:
                 # Only consider discrepancy if New Grade is not 'W'
                 if new_grade != 'W':
-                    # Check if Honor Quiz (Policy Quiz) is completed:
+                    # Check if Honor Quiz (Honor Quiz) is completed:
                     # We treat non-empty (after stripping) as completed.
                     if pd.notna(quiz) and str(quiz).strip() != "":
                         return pd.Series([True, 
@@ -100,26 +105,26 @@ class LoadData:
         df_disc = df[df['discrepancy']].copy()
         
         # Replace 'Notes' with the discrepancy message
-        df_disc['Notes'] = df_disc['discrepancy_message']
-        df_disc['New Grade'] = df_disc['newer_grade']
+        df_disc['notes'] = df_disc['discrepancy_message']
+        df_disc['new grade'] = df_disc['newer_grade']
         
         # Insert new columns 'Program' and 'Action' with constant values.
         # We want these columns inserted between 'Career' and 'Old Grade'.
         # First, find the index of the 'Career' column.
-        career_index = df_disc.columns.get_loc('Career')
+        career_index = df_disc.columns.get_loc('career')
         # Insert 'Program' right after 'Career'
-        df_disc.insert(career_index + 1, 'Program', 'MEEM')
+        df_disc.insert(career_index + 1, 'program', 'MEEM')
         # Insert 'Action' after 'Program'
-        df_disc.insert(career_index + 2, 'Action', 'Grade Correction')
+        df_disc.insert(career_index + 2, 'action', 'grade Correction')
         
-        # Drop the temporary columns and the 'Policy Quiz' column as requested.
-        df_disc.drop(columns=['discrepancy', 'discrepancy_message', 'Policy Quiz', 'newer_grade'], inplace=True)
+        # Drop the temporary columns and the 'Honor Quiz'
+        df_disc.drop(columns=['discrepancy', 'discrepancy_message', 'honor quiz', 'newer_grade'], inplace=True)
         
         # Reorder the columns to exactly match the required order:
         desired_order = [
-            'Student ID', 'Last Name', 'First Name', 'Term', 'Class Number', 
-            'Institution', 'Career', 'Program', 'Action', 'Old Grade', 'New Grade', 
-            'Class Subject', 'Catalog No.', 'Section', 'Notes'
+            'student id', 'last name', 'first name', 'term', 'class number', 
+            'institution', 'career', 'program', 'action', 'old grade', 'new grade', 
+            'class subject', 'catalog no.', 'section', 'notes'
         ]
         df_disc = df_disc[desired_order]
         
@@ -183,81 +188,118 @@ class LoadData:
         7. Output any discrepancies to 'Grade_Corrections.xlsx'.
         """
 
-        # Determine the base directory:
-        if getattr(sys, 'frozen', False):
-            # Running in a PyInstaller bundle
-            base_dir = os.path.dirname(sys.executable)
-        else:
-            # Running in a normal Python environment
-            base_dir = os.getcwd()
-
-        print("Base directory is:", base_dir)
-
-
-        # Use that directory in your glob search
-        registrar_files = glob.glob(os.path.join(base_dir, "GradeAddReport*.xlsx"))
-        if not registrar_files:
-            print("No registrar file found with prefix 'GradeAddReport' in this directory.")
-        # pick the most recently modified
-        registrar_file = max(registrar_files, key=os.path.getmtime)
-        print("Using registrar file:", registrar_file)
-
-        # Step 2: Load registrar data
-        required_cols = ['emplid','strm','class_nbr','institution','career','incoming grade','subject','catalog','section','message']
         try:
-            df_registrar = pd.read_excel(registrar_file, usecols=required_cols)
+            # Determine the base directory:
+            if getattr(sys, 'frozen', False):
+                # Running in a PyInstaller bundle
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                # Running in a normal Python environment
+                base_dir = os.getcwd()
         except Exception as e:
-            print("Error reading registrar file:", e)
+            print(f" Error: Failed to get the base path: {e}")
 
-        # rename columns to align with the rest of the code
-        df_registrar.rename(columns={'emplid': 'Student ID', 'strm': 'Term', 'class_nbr': 'Class Number', 'institution': 'Institution', 'career': 'Career', 'incoming grade': 'Old Grade', 'subject': 'Class Subject', 'catalog': 'Catalog No.', 'section': 'Section', 'message': 'Notes'}, inplace=True)
+        try:
+            # Step 1: Find your file as before…
+            registrar_files = glob.glob(os.path.join(base_dir, "GradeAddReport*.xlsx"))
+            registrar_file = max(registrar_files, key=os.path.getmtime)
+            print(f"\n      📁 " + "\033[1m" + f"Validating Registrar File:" + "\033[0m" + f"\n         📌 {os.path.basename(registrar_file)}")
+            required_cols = [
+                'emplid','strm','class_nbr','institution',
+                'career','incoming grade','subject',
+                'catalog','section','message'
+            ]
+        except Exception as e:
+            print(f" Error finding registrar file: {e}")
+            raise
 
-        # Step 3: discover all coursera CSV files
-        coursera_folder = os.path.join(base_dir, "Coursera-Gradebooks")
-        if not os.path.isdir(coursera_folder):
-            print("No 'Coursera-Gradebooks' folder found at:", coursera_folder)
+        try:
+            # Step 2: Read entire sheet (explicitly naming it)
+            df = pd.read_excel(registrar_file, sheet_name='CSCA')
+            
+            # Step 3: Normalize column names in‑place
+            df.columns = df.columns.str.strip().str.lower()
+            
+            # Optional sanity check:
+            missing = set(required_cols) - set(df.columns)
+            if missing:
+                raise KeyError(f"Missing columns after strip/lower: {missing}")
+            
+            # Step 4: Subset
+            df_registrar = df.loc[:, required_cols]
+            
+            # Now df_registrar should have exactly the 10 cols you asked for.
+        except Exception as e:
+            print("Error loading registrar file:", e)
+            # handle or re‑raise
 
-        csv_files = glob.glob(os.path.join(coursera_folder, "Coursera_Gradebook_*.csv"))
-        if not csv_files:
-            print("No Coursera Gradebook CSV files found in", coursera_folder)
+        try:
+            # rename columns to align with the rest of the code
+            df_registrar.rename(columns={'emplid': 'student id', 'strm': 'term', 'class_nbr': 'class number', 'institution': 'institution', 'career': 'career', 'incoming grade': 'old grade', 'subject': 'class subject', 'catalog': 'catalog no.', 'section': 'section', 'message': 'notes'}, inplace=True)
+            # Step 3: discover all coursera CSV files
+            coursera_folder = os.path.join(base_dir, "Coursera-Gradebooks")
+            if not os.path.isdir(coursera_folder):
+                print("No 'Coursera-Gradebooks' folder found at:", coursera_folder)
 
-        # Step 4: Load and combine all Coursera CSV data into a single DataFrame
-        df_list = []
-        for csv_file in csv_files:
-            try:
-                df_temp = pd.read_csv(csv_file)
-                df_list.append(df_temp)
-            except Exception as e:
-                print(f"Error reading {csv_file} => {e}")
-        if not df_list:
-            print("No valid Coursera CSV data loaded.")
+            csv_files = glob.glob(os.path.join(coursera_folder, "Coursera_Gradebook_*.csv"))
+            if not csv_files:
+                print("No Coursera Gradebook CSV files found in", coursera_folder)
+        except Exception as e:
+            print(f" Error: : {e}")
 
-        df_coursera = pd.concat(df_list, ignore_index=True)
-        df_coursera.rename(columns={'Present Grade': 'Course Grade', 'catalog': 'Catalog No.'}, inplace=True)
+        try:
+            # Step 4: Load and combine all Coursera CSV data into a single DataFrame
+            df_list = []
+            for csv_file in csv_files:
+                try:
+                    df_temp = pd.read_csv(csv_file)
+                    df_list.append(df_temp)
+                except Exception as e:
+                    print(f"Error reading {csv_file} => {e}")
+            if not df_list:
+                print("No valid Coursera CSV data loaded.")
+        except Exception as e:
+            print("Failed to fetch all scraped gradebooks from your root directory")
 
-        df_coursera["New Grade"] = df_coursera["Course Grade"].apply(self.calculate_letter_grade)
-
+        try:
+            df_coursera = pd.concat(df_list, ignore_index=True)
+            df_coursera.rename(columns={'Present Grade': 'course grade', 'Catalog': 'catalog no.'}, inplace=True)
+            df_coursera.columns = df_coursera.columns.str.lower().str.strip()
+            df_coursera["new grade"] = df_coursera["course grade"].apply(self.calculate_letter_grade)
+        except Exception as e:
+            print(f" Error: Failed to rename coursera gradebook columns and calculate letter grade: {e}")
 
         # Step 5: Merge on both "Student ID" and "catalog"
-        merged_df = pd.merge(df_registrar, df_coursera, on=["Student ID", "Catalog No."], how="inner")
-        b3_order = ['Student ID', 'Last Name', 'First Name', 'Term', 'Class Number', 'Institution', 'Career', 'Old Grade', 'New Grade', 'Class Subject', 'Catalog No.', 'Section', 'Notes', 'Policy Quiz']
-        merged_df = merged_df[b3_order]
-        if merged_df.empty:
-            print("Merged data is empty. Possibly no matching 'Student ID' and 'catalog' across files.")
-            return
-
-        final_df = self.evaluate_grade_discrepancies(merged_df)
-        if final_df.empty:
-            print("No grade discrepancies found => no Grade_Corrections.xlsx generated.")
-            return
-        else:
-            # Step 7: write corrections DataFrame to Grade_Corrections.xlsx
-            output_file = os.path.join(base_dir, "Grade_Corrections.xlsx")
-            try:
-                final_df.to_excel(output_file, index=False)
-                print("Grade Corrections report generated at:", output_file)
-            except Exception as e:
-                print("Error writing Grade Corrections report:", e)
+        try:
+            merged_df = pd.merge(df_registrar, df_coursera, on=["student id", "catalog no."], how="inner")
+            b3_order = ['student id', 'last name', 'first name', 'term', 'class number', 'institution', 'career', 'old grade', 'new grade', 'class subject', 'catalog no.', 'section', 'notes', 'honor quiz']
+            merged_df = merged_df[b3_order]
+            if merged_df.empty:
+                print("Merged data is empty. Possibly no matching 'Student ID' and 'catalog' across files.")
+                return
+        except Exception as e:
+            print(f" Error: Failed to merge registrar and coursera gradebooks: {e}")
+        
+        try:
+            final_df = self.evaluate_grade_discrepancies(merged_df)
+            if final_df.empty:
+                print("No grade discrepancies found => no Grade_Corrections.xlsx generated.")
+                return
+            else:
+                # Step 7: write corrections DataFrame to Grade_Corrections.xlsx
+                output_file = os.path.join(base_dir, "Grade_Corrections.xlsx")
+                past_output_file = copy.deepcopy(output_file)
+                try:
+                    final_df.to_excel(output_file, index=False)
+                    print(f"\n      ✅ " + "\033[1m" + "Grade Corrections report generated at:" + "\033[0m")
+                    time.sleep(0.05)
+                    print(f"         📌 File: Grade_Corrections.xslx")
+                    time.sleep(0.05)
+                    print(f"         📌 Directory: {past_output_file}")
+                except Exception as e:
+                    print("Error writing Grade Corrections report:", e)
+        except Exception as e:
+            print(f" Error: Failed to evaluate grade discrpanceies and write Grade_Corrections.xlsx flag file: {e}")
 
 
 # -------------------------------
