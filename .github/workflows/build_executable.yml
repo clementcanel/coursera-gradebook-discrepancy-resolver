@@ -1,0 +1,62 @@
+name: Build Python Executables
+
+on:
+  pull_request:
+    branches:
+      - main
+
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from file
+        id: get_version
+        run: echo "version=$(cat ./VERSION)" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install poetry
+
+      - name: Configure Poetry
+        run: |
+          if ([ "${{ runner.os }}" == "Windows" ]); then
+             echo "PATH=$env:USERPROFILE\.poetry\bin;$env:PATH" >> $GITHUB_ENV
+          else
+             echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
+          fi
+        shell: bash
+
+      - name: Install Dependencies
+        run: poetry install
+
+      - name: Build Executable with PyInstaller
+        run: poetry run pyinstaller --onefile --name coursera-scraper-${{ steps.get_version.outputs.version }} grade_verification/scripts/coursera_controller.py
+
+      - name: Rename Executable for OS
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            mv dist/coursera-scraper-${{ steps.get_version.outputs.version }}.exe dist/coursera-scraper-${{ steps.get_version.outputs.version }}-win.exe
+          else
+            mv dist/coursera-scraper-${{ steps.get_version.outputs.version }} dist/coursera-scraper-${{ steps.get_version.outputs.version }}-mac
+          fi
+        shell: bash
+
+      - name: Upload Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: executable-${{ matrix.os }}-${{ steps.get_version.outputs.version }}
+          path: dist/coursera-scraper-${{ steps.get_version.outputs.version }}-*

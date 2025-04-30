@@ -48,3 +48,8 @@ The **MS-CS on Coursera Course Management: Automating Course Readiness and Monit
     un-linted changes from being committed.
 9.  Run `make` to run tests and linters, or `make lint` to skip tests and run linters.
 10. Follow Conventiona Commits (https://www.conventionalcommits.org/en/v1.0.0/#specification) when pushing changes
+
+
+## Publishing and Creating Releases
+1. On every push to a branch, new artifacts will be created and pushed as artifacts from the run to verify they work
+2. On every push to the main branch, a new release will be created and pushed to the repository
