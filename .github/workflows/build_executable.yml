@@ -44,7 +44,11 @@ jobs:
         run: poetry install
 
       - name: Build Executable with PyInstaller
-        run: poetry run pyinstaller --onefile --name coursera-scraper-${{ steps.get_version.outputs.version }} grade_verification/scripts/coursera_controller.py
+        run: |
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            poetry run pyinstaller --onefile --console --hidden-import=openpyxl --name coursera-scraper-${{ steps.get_version.outputs.version }} grade_verification/scripts/main.py
+          else
+            poetry run pyinstaller --onefile --name coursera-scraper-${{ steps.get_version.outputs.version }} grade_verification/scripts/main.py
 
       - name: Rename Executable for OS
         run: |
