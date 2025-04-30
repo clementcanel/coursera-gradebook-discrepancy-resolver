@@ -1,7 +1,6 @@
-import sys
-import time
-import threading
+import sys, time, threading
 
+"""Simple terminal spinner animation used to indicate a waiting period in the program flow"""
 class Spinner:
     def __init__(self, message="Working..."):
         self._stop_event = threading.Event()

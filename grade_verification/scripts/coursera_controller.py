@@ -1,6 +1,19 @@
-# External imports
+""" FILE OVERVIEW NOTES: coursera_controller.py
+    - File: coursera_controller.py
+    - Purpose: The primary controller class for all Selenium Scraping opperations:
+        1. Initialize Selenium & Chrome Drivers
+        2. Perform Login Flow
+        3. Navigate Coursera Pages
+        4. Scrape and Display Coursera Info (available courses, sections, gradebook columns, etc.)
+        5. Generate Course/section Gradebooks as individual .csv files in a new 'Coursera-Gradebooks' Folder
+            - Gradebook files follow the naming convetion: 'Coursera_Gradebook_<Catalog No.>_CSCA.csv'
+"""
+
+# System Imports
 import os, csv, sys, ctypes, time, glob
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' # Suppresses Windows Error Logs
+
+# Selenium / Chrome Driver Imports
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -9,63 +22,67 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 # Internal imports
-from grade_verification.page_objects.home_page import HomePage
 from grade_verification.page_objects.course_page import CoursePage
-from grade_verification.page_objects.session_page import SessionPage
+from grade_verification.page_objects.section_page import sectionPage
 from grade_verification.page_objects.base_page import BasePage
 from grade_verification.page_objects.spinner import Spinner
 
 class CourseraController:
 
     """
-    Function: __init__()
-    Purpose: Initializes the CourseraController object, which is responsible for controlling
-             Selenium for grade scraping
-    Flow:
-        1. Initializes chrome driver using the _init_driver() function.
-        2. Initializes page objects:
-            - base_page: Selenium helper functions
-            - home_page: Functions for login including is_logged_in and click_login
-            - course_page: Functions for getting session info including search_courses and 
-                           scrape_courses
-            - session_page: Functions for Gradebook scraping including toggle_staff_learners, 
-                            get_column_headers, and get_grade_rows
-        3. Verifies the existance of a valid Registrar Record file.
-        4. Asks the user if they want to run in test more or not, then sets settings accordingly.
+        * Function: __init__()
+        * Purpose: Initializes the CourseraController object, which is responsible for controlling
+                Selenium for grade scraping
+        * Flow:
+            1. Initializes chrome driver using the _init_driver() function.
+            2. Initializes page objects:
+                - base_page: Selenium helper functions, XPaths, Course Lists.
+                - course_page: Functions for getting section info including search_courses and 
+                            scrape_courses
+                - section_page: Functions for Gradebook scraping including toggle_staff_learners, 
+                                get_column_headers, and get_grade_rows
+            3. Verifies the existance of a valid Registrar Record file.
+            4. Asks the user if they want to run in test more or not, then sets settings accordingly.
     """
     def __init__(self):
+        # Loading spinner starts to indicate startup
         print("\n")
         spinner = Spinner("      🔄 Booting...")
         spinner.start()
+
+        # 1/2) Attempt to initialize the primary Selenium Chrome Driver and all page class objects
         try:
-            # init the driver in headless mode by default
+            # Init the driver in headless mode by default
             self.driver = self._init_driver(headless=True)
 
-            # init page objects with the current driver
+            # Init page objects with the current driver
             self.base_page = BasePage(self.driver)
-            self.home_page = HomePage(self.driver)
             self.course_page = CoursePage(self.driver)
-            self.session_page = SessionPage(self.driver)
+            self.section_page = sectionPage(self.driver)
         except:
             print(" Error: Failed to initialize a chrome driver!")
         spinner.stop()
         
+
         print("\n\n -------------------------------------------------------------------------")
         print(" ----  ✨" + "\033[1m" + " Starting Up The CU MS-CS Coursera Gradebook Validator!" + "\033[0m" + "  ✨  ----")
         print(" -------------------------------------------------------------------------")
 
+        # Attempts to determine the directory in which this script is running (varies between executable vs. terminal call)
         try:
-            # Determine the base directory:
+            # Determine the base directory as a PyInstaller executable:
             if getattr(sys, 'frozen', False):
                 # Running in a PyInstaller bundle
                 base_dir = os.path.dirname(sys.executable)
             else:
-                # Running in a normal Python environment
+                # Determine the base directory in a normal Python environment:
                 base_dir = os.getcwd()
         except Exception as e:
             # Failed to find base directory:
             print(f" Error: Failed to locate the directory that this excutable is running from:\n {e}")
         
+        # 3) Attempt to find a valid Registrar Grade Record in the base directory
+        # - A Registrar Record is valid if it is formatted as an Excel (.xlsx) file and has a name prefixed with 'GradeAddReport'
         try:
             registrar_files = glob.glob(os.path.join(base_dir, "GradeAddReport*.xlsx"))
             registrar_file =  max(registrar_files, key=os.path.getmtime)
@@ -73,6 +90,7 @@ class CourseraController:
             print(f" Error: Failed to locate a valid registrar file in your base directory: \n {e}")
             registrar_file = ""
 
+        # If no valid Registrar Record is detected, print instructions on how to troubleshoot.
         try:
             if not registrar_file:
                 print("\n   ⚠️" + "\033[1m" + " Oh No!" + "\033[0m" + " We couldnt find a valid Registrar Record in the current directory:")
@@ -92,6 +110,7 @@ class CourseraController:
         except Exception as e:
             print(f" Error: Failed to print Registrar File Re-Check Instructions: {e}")
 
+        # While no valid Registrar Record is detected, reporompt the user to search again. 
         try:
             while not registrar_file:
                 re_check = input("\n   🟢 Please press the return/enter key to re-check for a valid Registrar Record:  ")
@@ -102,11 +121,13 @@ class CourseraController:
         except Exception as e: 
             print(f" Error: Failed to prompt the user to recheck for Registrar File existance: {e}")
 
+        # Split the Registrar Record path into its parts with a '\' as the delimitor 
         try:
             registrar_parts = registrar_file.split("\\")
         except Exception as e:
             print(f"Failed to split the registrar file path into parts:\n {e}")
 
+        # 4) Ask the user if they are running the program in test or production mode
         try: 
             time.sleep(1)
             test_selection = input("\n   🟢 " + "\033[1m" + "Are you running in 'Test' mode? (y/n): " + "\033[0m")
@@ -124,10 +145,15 @@ class CourseraController:
         except Exception as e:
             print(f" Error: Failed to prompt the user if they would like to run the program in Test or Production mode: {e}")
 
+        # Print program specifications based on test mode choice
         try:
             if test_selection == "y":
                 self.course_list = self.base_page.test_courses
                 self.testing = True
+
+                # If the user is in test mode they will be prompted to select if they want to run in 'log' mode
+                # - In 'log' mode, the terminal will not be cleared after major program milestones (for debugging)
+                # - In non-log or 'Cinimatic' mode, the terminal will be cleared after major milestones (Cleaner UI/UX)
                 while True:
                     # log mode will prevent console clears for debuging purposes.
                     cinamode_input = input("\n   🟢 Run in Log Mode? (y/n): ")
@@ -140,6 +166,8 @@ class CourseraController:
                     else:
                         print("   🟡 Invalid Input: enter either 'y' or 'n' (non case-sensitive)")
                 cinamode_text = "Cinimatic" if self.cinamode == True else "Log"
+
+                # Print test mode program specifications
                 print("\n      ✅" + "\033[1m" + " Now running in test mode!" + "\033[0m")
                 time.sleep(0.05)
                 print("         📌 Uses dummy courses defined in the 'test_courses' list.")
@@ -161,10 +189,13 @@ class CourseraController:
                 time.sleep(0.05)
                 print(f"            ✨ Record Path: {registrar_file[0:(len(registrar_file) - len(registrar_parts[-1]))]}")
                 time.sleep(1)
+
             else:
                 self.course_list = self.base_page.courses
                 self.testing = False
                 self.cinamode = True
+
+                # Print production mode specifications
                 print("\n      ✅" + "\033[1m" + " Now running in Production Mode!" + "\033[0m")
                 time.sleep(0.05)
                 print("         📌 Promps seleciton of predefined 'CSCA' courses that can be scraped.")
@@ -191,33 +222,36 @@ class CourseraController:
                 time.sleep(0.05)
                 print("            ✨ Honor Code Quiz")
                 time.sleep(1)
+
         except Exception as e:
             print(f" Error: Failed to present details of Mode Selection: {e}")
 
+        # Set the 'Educator Admin' dashboard URL (same across all CU Boulder affiliated Coursera admin acounts)
         try:
-            self.selected_sections = [] # will hold list of (course, session, session_url) tuples
             self.admin_dashboard_url = "https://www.coursera.org/admin-v2/boulder/home/courses"
         except Exception as e:
-            print(f" Error: Failed to set selected sessions and admin dashboard URL: {e}")
+            print(f" Error: Failed to set selected sections and admin dashboard URL: {e}")
         move_on_input = input("\n   🟢 Press Enter/Return to begin Sign In: ")
+
         if self.cinamode:
             os.system('cls' if os.name == 'nt' else 'clear')
 
     """
-    Function: _init_driver(headless: bool)
-    Purpose: Initializes a chrome driver instance to be used by Selenium for web scraping.
-    Flow:
-        1. Initializes the following options for the driver to be initialized::
-            - --start-maximized: The window starts in its maximized state (widest and tallest window possible)
-            - --disable-backgrounding-occluded-windows: always treats the chrome window as visible.
-            - --disable-renderer-backgrounding: Keeps DOM rendering of invisible pages fast.
-            - --excludeSwitches, enable-logging: Removes some random windows warnings.
-            - --log-level=3: ensures only the most dire of errors are displayed to the user.
-            - --headless=new/--window-size=1920,1080: makes the window invisible, sets window dimensions again just in case.
-        2. Creates a new chrome driver window with the specified settings loaded in.
+        * Function: _init_driver(headless: bool)
+        * Purpose: Initializes a chrome driver instance to be used by Selenium for web scraping.
+        * Flow:
+            1. Initializes the following options for the driver to be initialized::
+                - --start-maximized: The window starts in its maximized state (widest and tallest window possible)
+                - --disable-backgrounding-occluded-windows: always treats the chrome window as visible.
+                - --disable-renderer-backgrounding: Keeps DOM rendering of invisible pages fast.
+                - --excludeSwitches, enable-logging: Removes some random windows warnings.
+                - --log-level=3: ensures only the most dire of errors are displayed to the user.
+                - --headless=new/--window-size=1920,1080: makes the window invisible, sets window dimensions again just in case.
+            2. Creates a new chrome driver window with the specified settings loaded in.
     """
     def _init_driver(self, headless: bool) -> webdriver.Chrome:
 
+        # 1) Set specifications for new Chrome Driver window.
         try:
             options = webdriver.ChromeOptions()
             options.add_argument("--start-maximized")
@@ -234,41 +268,46 @@ class CourseraController:
         except Exception as e:
             print(f" Error: Failed to set options for new Chrome Driver Instance: {e}")
 
+        # 2) Create new Chrome Driver window, loading in with the above specifications.
         try:
+            # 'log_path=os.devnull' redirects random/unrelated windows terminal outputs to a null terminal. (Keep UI Clean) 
             service = Service(ChromeDriverManager().install(), log_path=os.devnull)
             driver = webdriver.Chrome(service=service, options=options)
             os.system('cls' if os.name == 'nt' else 'clear')
-            driver.implicitly_wait(1)
+            driver.implicitly_wait(1) # Lets the driver load in (no wait causes problems)
         except Exception as e:
             print(f" ERROR: Failed to launch chrome driver: {e}")
-
+        
+        # Return the newly initialized driver.
         return driver
 
 
     """
-    Function: perform_login()
-    Purpose: Checks if the user needs to be logged in to Coursera, then launches a visible chrome window to
-             allow the user to log in manually, then transfers these session cookies to the headless driver.
-    Flow:
-        1. Navigates to the Coursera home page in the headless driver
-        2. Checks for the presense of a page element that indicates if the user is logged in
-            - If the user is alredy logged in, this function simply returns.
-            - If the user is not alredy logged in, we move on to step 3.
-        3. Lanuches a visible driver and clicks the 'log in' button, allowing the user to log in manually
-        4. Allows the user 5 minutes to log in, checking on regular intervals for a page elements that 
-           indicates login success.
-        5. If login success is detected, the visible chrome window is closed, and the visible windows 
-           session cookies are transfered to the headless chrome window, and the function returns.
+        * Function: perform_login()
+        * Purpose: Checks if the user needs to be logged in to Coursera, then launches a visible chrome window to
+                allow the user to log in manually, then transfers these section cookies to the headless driver.
+        * Flow:
+            1. Navigates to the Coursera home page in the headless driver
+            2. Checks for the presense of a page element that indicates if the user is logged in
+                - If the user is alredy logged in, this function simply returns.
+                - If the user is not alredy logged in, we move on to step 3.
+            3. Lanuches a visible driver and clicks the 'log in' button, allowing the user to log in manually
+            4. Allows the user 5 minutes to log in, checking on regular intervals for a page elements that 
+            indicates login success.
+            5. If login success is detected, the visible chrome window is closed, and the visible windows 
+            section cookies are transfered to the headless chrome window, and the function returns.
     """
     def perform_login(self):
-        """logs into Coursera, if already logged in, does nothing"""
-
+        # 1/2) Navigate to Coursera Home + Login view
+        # - If logged in already, return
+        # - Log in manually if not logged in already
         try:
-            self.driver.get("https://www.coursera.org/?authMode=login")
-            WebDriverWait(self.driver, 5).until(lambda d: self.home_page.is_logged_in())
+            self.driver.get("https://www.coursera.org")
+            WebDriverWait(self.driver, 5).until(lambda d: self.base_page.is_logged_in())
             print("\n      ••• ✅" + "\033[1m" + " You're Already logged in to Coursera!" + "\033[0m" + " ✅ •••")
             time.sleep(1)
             return
+        
         except Exception:
             print("\n      ••• ⚠️" + "\033[1m" + " You are not logged in to Coursera!" + "\033[0m" + " ⚠️ •••")
             time.sleep(0.05)
@@ -276,47 +315,43 @@ class CourseraController:
             time.sleep(0.05)
             print("         📌 You have 5 minutes to log in.")
             print("\n")
+
+            # start loading spinner to indicate new driver initialization
             spinner = Spinner("      🔄 Opening Visible Window...")
             spinner.start()
             time.sleep(5)
             pass
 
-        
+        # 3) Launches new/visible Chrome Driver window and directs to the login window
         try:
-            # launch a temporary visible driver for manual login
+            # Launch a temporary visible driver for manual login
             visible_driver = self._init_driver(headless=False)
             visible_driver.maximize_window()
-            temp_home = HomePage(visible_driver)
+            temp_base = BasePage(visible_driver)
 
-            # nav to home page with visible driver, click login button
-            visible_driver.get("https://www.coursera.org")
-            WebDriverWait(visible_driver, 5).until(
-                EC.presence_of_element_located(temp_home.LOGIN_SELECTOR)
-            )
-            spinner.stop()
+            # Nav to home page / login window
+            visible_driver.get("https://www.coursera.org/?authMode=login")
+            spinner.stop() # No longer initializing the new driver, stop the loading spinner in the terminal
         except Exception:
             print("   ⚠️ Login page failed to load. Retrying...")
-
             visible_driver.get("https://www.coursera.org")
             time.sleep(0.2)
-
-        try:
-            temp_home.click_login()
-        except Exception as e:
-            print("   ❌ ERROR: Could not click login button...")
         
-        # wait for user to enter login credentials
+        # wait 5 minutes for the user to enter login credentials and solve any captchas
         try:
-            WebDriverWait(visible_driver, 300).until(lambda d: temp_home.is_logged_in())
+            WebDriverWait(visible_driver, 300).until(lambda d: temp_base.is_logged_in())
         except Exception as e:
             sign_in_again = input("   ❌ No login was detected on visible driver, press enter/return to try signing in again: ")
             self.perform_login()
             return
+        
+        # New loading spinner while session cookies transfer from the logged-in Driver to the Headless Selenium Driver
         print("\n")
         spinner = Spinner("      🔄 Transfering cookies to Selenium window...")
         spinner.start()
+
+        # Attempt to retrive/load the cookies to the headless driver, and close the visible driver
         try:
-            # retrieve cookies and add them to headless driver
             cookies = visible_driver.get_cookies()
             visible_driver.quit()
 
@@ -325,13 +360,14 @@ class CourseraController:
                 try:
                     self.driver.add_cookie(cookie)
                 except Exception as e:
-                    print(f"   ❌ ERROR: couldnt trasnfer session cookie: {e} to headless driver.")
+                    print(f"   ❌ ERROR: couldnt trasnfer section cookie: {e} to headless driver.")
             self.driver.refresh()
         except Exception as e:
             sign_in_again = input("   ❌ Failed to retrieve cookies, press enter/return to try signing in again: ")
             self.perform_login()
             return
-        spinner.stop()
+        
+        spinner.stop() # Stop the loading spinner in the terminal to indicate cookie transfer completion
 
         if self.cinamode:
             os.system('cls' if os.name == 'nt' else 'clear')
@@ -339,56 +375,64 @@ class CourseraController:
         
         print("\n\n      ••• ✅" + "\033[1m" + " Login Successful!" + "\033[0m" + " ✅ •••")
 
+        # Reinitialize home page in case cookies changed section state
         try:
             WebDriverWait(self.driver, 5).until(
-                EC.visibility_of_element_located(self.home_page.PROFILE_BUTTON_SELECTOR)
+                EC.visibility_of_element_located(self.base_page.PROFILE_BUTTON_SELECTOR)
             )
-            # reinitialize home pagein case cookies changed session state
-            self.home_page = HomePage(self.driver)
+            self.base_page = BasePage(self.driver)
             time.sleep(1)
         except Exception as e:
             sign_in_again = print(f"   ❌ ERROR: Could not transfer login to headless driver: {e}")
             self.perform_login()
             return
 
+
     """
-    Function: nav_to_admin()
-    Purpose: Helper function for navigating the headless chrome driver to the 'Educator Admin' dashboard.
-    Flow:
-        1. Attempts to navigate to the 'Educator Admin' link, which should be universla for all
-           CU Coursera Administraton
+        * Function: nav_to_admin()
+        * Purpose: Helper function for navigating the headless chrome driver to the 'Educator Admin' dashboard.
+        * Flow:
+            1. Attempts to navigate to the 'Educator Admin' link, which should be universal for all
+               CU Coursera Administraton.
+            2. Looks for the presence of 'Educator Admin' Courses table to verify successful navigation.
     """
     def nav_to_admin(self):
-        """navigates from the home page to the educator admin dashboard"""
+
+        # 1) Navigate to the Educator Admin Dashbaord        
         try:
             self.driver.get(self.admin_dashboard_url)
         except:
             print("\n   ❌ ERROR: Selenium failed to navigate to Educator Admin dashboard.\n ••• Coudln't find page elements to click •••")
 
+        # 2) Find course table to verify successful navigation
         try:
             WebDriverWait(self.driver, 5).until(
                 EC.visibility_of_element_located(CoursePage.TABLE_BODY_LOCATOR)
             )
         except:
-            print("\n   ❌ ERROR: Selenium failed to locate the Course Section table.")
+            print("\n   ❌ ERROR: Selenium failed to locate the Course section table.")
     
 
     """
-    Function: main_flow()
-    Purpose: The primary function of this class, which handles the entire data scraping flow from start to finish.
-        1. Calls perform_login() to allow the user to manually log in to their Coursera Admin account, allowing the
-           headless driver access to the user account.
-        2. Navigates the user to their 'Educator Admit' course overview dashbaord, and prints a list of predefined 
-           course titles that are avialable for scraping which are defined in the 'courses' list.
-        3. The user selects and confirms the indices of the courses they'd like to scrape grades from.
-        4. For each selected CSCA course title that the user selected, the process_single_course(course name) 
-           function is called, passing in the selected course title.
+        * Function: main_flow()
+        * Purpose: The primary function of this class, which handles the entire data scraping flow from start to finish.
+            1. Calls perform_login() to allow the user to manually log in to their Coursera Admin account, allowing the
+            headless driver access to the user account.
+            2. Navigates the user to their 'Educator Admit' course overview dashbaord, and prints a list of predefined 
+            course titles that are avialable for scraping which are defined in the 'courses' list.
+            3. The user selects and confirms the indices of the courses they'd like to scrape grades from.
+            4. For each selected CSCA course title that the user selected, the process_single_course(course name) 
+            function is called, passing in the selected course title.
     """
     def main_flow(self):
-        self.perform_login()
 
+        # 1) Perform user login
+        self.perform_login()
+        
+        # 2) Navigate to 'Educator Admin' Dashboard
         self.nav_to_admin()
 
+        # 3) Present available coureses for user selection / user selects and confirms their selecions.
         try:
 
             print("\n      ••• 🎯" + "\033[1m" + " Navigation to Educator Admin Dashboard successful!" + "\033[0m" + " 🎯 •••")
@@ -420,6 +464,8 @@ class CourseraController:
         if self.cinamode:
             os.system('cls' if os.name == 'nt' else 'clear')
 
+        # 4) For each course processed print out a queue of remaining courses to be scraped
+        #  - then call self.process_single_course to begin scrape of the next user slected course
         queue = selected.copy()
         for course_title in selected:
             try:
@@ -433,47 +479,55 @@ class CourseraController:
                 else:
                     print(f"\n      ••• ✅" + "\033[1m" + f" {course_title} Is The Last Course To Process!" + "\033[0m" + " ✅ ••• ")
                     time.sleep(1)
+
+                # Begin processing the current course's sessions for course session selection.
                 self.process_single_course(course_title)
+
             except Exception as e:
                 print(f" Error: Failed to update course queue: {e}")
 
 
     """
-    Function: process_single_course(course_title)
-    Purpose: Handles the navigation and session selection of a single selected CSCA Course.
-    Flow:
-        1. If not already there, pushes the 'Educator Admin' dashbaord link to bring up the
-           Courses Overview page.
-        2. Asks the user if they would like to access sessions marked as 'Archived' for this course.
-        3. Uses course_page.scrape_courses() to:
-            - Search the selected course title in the Course Overview search bar.
-            - Scrape the 'sessions' column for resultant row of the Course Overview table.
-            - If testing: disregards CSCA prefix requirement for session title
-            - If production: only returns sessions prefixed with 'CSCA'
-        4. Asks the user to select which resulting course sessions they would like to srape.
-        5. For the first session selected under the given course title, the function navigates 
-           to that sessions gradebook page and scrapes the Gradebook table column headers.
-        6. The full list of available column headers is printed to the user, who is asked to
-           select the column to be scraped that will denote a students Honor Quiz completion
-        7.
+        * Function: process_single_course(course_title)
+        * Purpose: Handles the navigation and section selection of a single selected CSCA Course.
+        * Flow:
+            1. If not already there, pushes the 'Educator Admin' dashbaord link to bring up the
+            Courses Overview page.
+            2. Uses course_page.scrape_courses() to:
+                - Search the selected course title in the Course Overview search bar.
+                - Scrape the 'sections' column for resultant row of the Course Overview table.
+                - If testing: disregards CSCA prefix requirement for section title
+                - If production: only returns sections prefixed with 'CSCA'
+            3. Asks the user if they would like to access sections marked as 'Archived' for this course.
+            4. Asks the user to select which resulting course sections they would like to srape.
+            5. For the first section selected under the given course title, the function navigates 
+            to that sections gradebook page and scrapes the Gradebook table column headers.
+            6. The full list of available column headers is printed to the user, who is asked to
+            select the column to be scraped that will denote a students Honor Quiz completion
+            7. The user will be presented with their final selections and requirements based on 
+            if they're running in test vs production mode, and may reconfigure their selections if needed.
+            8. Scrapes the first selected section by calling self.scrape_grades_for_section().
+            9. Scrapes gradebooks for all subseqent sections.
     """
     def process_single_course(self, course_title: str):
-
+        
+        # 1) Navigate to the 'Educator Admin' dashboard if not already there.
         try:
             if self.driver.current_url != self.admin_dashboard_url:
                 self.driver.get(self.admin_dashboard_url)
         except Exception as e:
             print(f" Error: Failed to navigate to the admin dashboard: {e}")
 
-        # 1) search for the given course title in the search bar
+        # 2) Search for the given course title in the search bar
         try:
             self.course_page.search_courses(course_title)
         except Exception as e:
             print(f" Error: Failed to search for course on the admin dashboard: {e}")
 
+        # 3) Ask if the user would like to also see 'Archived' sections from the selected course for selection.
         responses = ["y", 'Y', "n", "N"]
         try:
-            search_archive = input("\n   🟢 " + "\033[1m" + "Would you like to also search for Archived sessions? (y/n): " + "\033[0m")
+            search_archive = input("\n   🟢 " + "\033[1m" + "Would you like to also search for Archived sections? (y/n): " + "\033[0m")
             archive_toggle = False        
             while search_archive not in responses:
                 search_archive = input("\n   🟡 Invalid Input: Please enter 'y' or 'n': ")
@@ -486,21 +540,25 @@ class CourseraController:
         except Exception as e:
             print(f" Error: Failed to present the user with archive toggle selection: {e} ")
 
-        # 2) scrape course sessions from the list of courses that are both 'Live' and prefixed with 'prefix'
+        # Start a loading spinner while the course_page.scrape_courses() funciton scrapes/extracts a list of valid course section tuples
         print("\n")
-        spinner = Spinner("      🔄 Scraping Course Sessions...")
+        spinner = Spinner("      🔄 Scraping Course sections...")
         spinner.start()
-        try:
-            return_sessions = self.course_page.scrape_courses(prefix="CSCA", archiveToggle=archive_toggle, isTesting=self.testing) # list of tuples: (course_name, section_name, section_link)
 
-            filtered_sessions = []
-            for session in return_sessions:
-                (course_name, session_name, link_session, stat) = session
+        # 4) the course_page.scrape_courses() funciton scrapes/extracts a list of valid course seciton tuples
+        #  - Only sections with a 'course_name' that match the 'course_title' are appended/displayed to the user.
+        try:
+            return_sections = self.course_page.scrape_courses(prefix="CSCA", archiveToggle=archive_toggle, isTesting=self.testing)
+
+            filtered_sections = []
+            for section in return_sections:
+                (course_name, section_name, link_section, stat) = section
                 if course_name == course_title:
-                    filtered_sessions.append(session)
+                    filtered_sections.append(section)
         except Exception as e:
-            print(f" Error: Failed to scrape and filter selected course sessions: {e}")
-        spinner.stop()
+            print(f" Error: Failed to scrape and filter selected course sections: {e}")
+
+        spinner.stop() # Stop the spinner since course sessions are done being scraped.
         
         status = 'Live'
         prefix = 'CSCA'
@@ -508,10 +566,10 @@ class CourseraController:
             status = 'Live or Archived'
             prefix = 'Any Prefix'
 
+        # Display the sessions in filtered_session to the user to be selected for gradebook scraping.
         try:
-            # 3) prompt user to pick sessions to scrape
-            if not filtered_sessions:
-                print(f"\n      ⚠️ No sessions were found for '{course_title}' that are:")
+            if not filtered_sections:
+                print(f"\n      ⚠️ No sections were found for '{course_title}' that are:")
                 time.sleep(0.05)
                 print(f"         📌 Marked as {status}")
                 time.sleep(0.05)
@@ -523,13 +581,15 @@ class CourseraController:
 
             print(f"\n      ••• 🔍" + "\033[1m" + f"  Current Course: {course_title}" + "\033[0m" + "  🔍 •••")
             time.sleep(1)
-            print(f"\n ----------------------  ✨" + "\033[1m" + " Available Sessions" + "\033[0m" + " ✨  ----------------------")
+
+
+            print(f"\n ----------------------  ✨" + "\033[1m" + " Available sections" + "\033[0m" + " ✨  ----------------------")
             time.sleep(0.05)
-            filtered_sessions.sort(key=lambda session: session[3] != 'Live')
-            for i, (c_name, s_name, s_link, s_status) in enumerate(filtered_sessions, start=1):
+            filtered_sections.sort(key=lambda section: section[3] != 'Live')
+            for i, (c_name, s_name, s_link, s_status) in enumerate(filtered_sections, start=1):
                 if c_name == course_title:
                     status_emoji = "✅" if s_status == "Live" else "📁"
-                    print(f"      " + "\033[1m" + f"{i}. 🍎 Session:" + "\033[0m" + f" {s_name}")
+                    print(f"      " + "\033[1m" + f"{i}. 🍎 section:" + "\033[0m" + f" {s_name}")
                     time.sleep(0.050)
                     print(f"            🏫 Course: {c_name}")
                     time.sleep(0.05)
@@ -538,13 +598,14 @@ class CourseraController:
             print(f" ------------------------------------------------------------------------")
             time.sleep(1)
 
+
             valid_input = False
             while valid_input == False:
-                choice_input = input("\n   🟢 " + "\033[1m" + f"Enter list indices of sessions to scrape (e.g. 1,3,5): " + "\033[0m")
-                sessionIndices = [int(x.strip()) for x in choice_input.split(",") if x.strip().isdigit()]
+                choice_input = input("\n   🟢 " + "\033[1m" + f"Enter list indices of sections to scrape (e.g. 1,3,5): " + "\033[0m")
+                sectionIndices = [int(x.strip()) for x in choice_input.split(",") if x.strip().isdigit()]
                 discrep_ticker = False
-                for dex in sessionIndices:
-                    if dex > len(filtered_sessions) + 1 or dex < 1:
+                for dex in sectionIndices:
+                    if dex > len(filtered_sections) + 1 or dex < 1:
                         print("   🟡 Oh No, Your selection was invalid!")
                         print("    Ensure you're properly entering the indices of your selections:\n    '1,2,3,5,10...', '2', etc.")
                         discrep_ticker = True
@@ -556,8 +617,8 @@ class CourseraController:
             while confirmation == False:
                 print("   🟢 Press enter/return to confirm your index selection of:")
                 time.sleep(0.05)
-                for idx in sessionIndices:
-                    print(f"      📌 {filtered_sessions[idx - 1][1]}")
+                for idx in sectionIndices:
+                    print(f"      📌 {filtered_sections[idx - 1][1]}")
                     time.sleep(0.05)
                 confirm_choice_input = input("   🟡 Or enter your revised selection now: ")
                 time.sleep(1)
@@ -565,10 +626,10 @@ class CourseraController:
                 if confirm_choice_input == "":
                     confirmation = True
                 else:
-                    sessionIndices = [int(x.strip()) for x in choice_input.split(",") if x.strip().isdigit()]
+                    sectionIndices = [int(x.strip()) for x in choice_input.split(",") if x.strip().isdigit()]
                     discrep_ticker = False
-                    for idx in sessionIndices:
-                        if idx > len(filtered_sessions) + 1 or idx < 1 or not idx.isdigit():
+                    for idx in sectionIndices:
+                        if idx > len(filtered_sections) + 1 or idx < 1 or not idx.isdigit():
                             print("   🟡 Oh No, Your selection was invalid!")
                             print("    Ensure you're properly entering the indices of your selections:\n    '1,2,3,5,10...', '2', etc.")
                             discrep_ticker = True
@@ -576,42 +637,50 @@ class CourseraController:
                     if discrep_ticker == False:
                         confirmation = True
         except Exception as e:
-            print(f" Error: Failed to present user with session options and selection: {e}")
+            print(f" Error: Failed to present user with section options and selection: {e}")
 
-        
+        # 5) Navigate to the first user selected section, scrape its gradebook column headers, print to user for column selection.
         try:
             selected_links = []
 
-            for idx_str in sessionIndices:
+            # Compile the sections for all user picks
+            for idx_str in sectionIndices:
                 idx = int(idx_str)
-                if 1 <= idx <= len(filtered_sessions):
-                    selected_links.append(filtered_sessions[idx - 1])
-
+                if 1 <= idx <= len(filtered_sections):
+                    selected_links.append(filtered_sections[idx - 1])
             if not selected_links:
-                print(f"\n      ••• ⚠️ No sessions selected for '{course_title}'! ⚠️ •••")
+                print(f"\n      ••• ⚠️ No sections selected for '{course_title}'! ⚠️ •••")
                 return
             
-            first_session = selected_links[0]
-            fs_c, fs_s, fs_link, fs_status = first_session
+            # Extract the first section fro the list of selected sections
+            first_section = selected_links[0]
+            fs_c, fs_s, fs_link, fs_status = first_section
 
+            # Navigate to first section gradebook
             self.driver.get(fs_link)
             self.base_page.sleep(2)
             if self.cinamode:
                 os.system('cls' if os.name == 'nt' else 'clear')
 
+            # Display in the console that column headers for the current section are being scraped
             fs_status_emoji = "✅" if fs_status == "Live" else "📁"
-    
             print(f"\n      ✨ " + "\033[1m" + f"Now Scraping:" + "\033[0m" + f" {fs_c}")
-            print(f"         🍎 Session: {fs_s}")
+            print(f"         🍎 section: {fs_s}")
             print(f"         {fs_status_emoji} Status: {fs_status}")
             time.sleep(1)
-
             print("\n")
+
+            # Start up loading spinner to indicate waiting for the Selenium process
             spinner = Spinner("      🔄 Scraping Gradebook Column Headers...")
             spinner.start()
-            headers, required = self.session_page.get_column_headers()
-            spinner.stop()
 
+            # Scrape the column headers from the first row of the gradebook table
+            headers, required = self.section_page.get_column_headers()
+
+            spinner.stop() # Stop the loading spinner
+
+
+            # Display the list of available gradebook columns, as well as auto-selected columns based on grade validation requirements.
             print(f"\n ----------------------  ✨" + "\033[1m" + " Gradebook  Columns" + "\033[0m" + " ✨  ----------------------")
             time.sleep(0.05)
             for idx, header in enumerate(headers, start=1):
@@ -625,8 +694,9 @@ class CourseraController:
             print(f" ------------------------------------------------------------------------")      
             time.sleep(1)     
         except Exception as e:
-            print(f" Error: Failed to present user with column headers for their first session selection: {e}")
+            print(f" Error: Failed to present user with column headers for their first section selection: {e}")
 
+        # 6) Ask the user to select the column header that denotes Honor Code Quiz Completion.
         try:
 
             while True:
@@ -648,6 +718,9 @@ class CourseraController:
                 time.sleep(0.05)
             print(f" ------------------------------------------------------------------------")
             time.sleep(0.05)
+
+            # Display a notice about what the requirements for successfull gradebook validation are, allowing the user to make 
+            # modifications to the current column selectsions (Remove/Replace a selected column)
             print(f"\n      ⚠️" + "\033[1m" + " Note:" + "\033[0m" + f" Running in {mode_text} requires the following columns:")
             time.sleep(0.05)
             if not self.testing:
@@ -690,7 +763,9 @@ class CourseraController:
 
                 built_in_reqs = {"1":"Student Id", "2": "First Name", "3": "Last Name", "4": "Current Grade", "5":"Honor Quiz (chosen by you)"} if not self.testing else {"1":"Name", "2": "Current Grade", "3":"Honor Quiz (chosen by you)"}
                 time.sleep(0.05)
+
                 while True:
+                    # If the column selections are already valid, the user presses enter, skipping the whole reconfig flow below
                     column_fixes = input("\n   🟢 " + "\033[1m" + f"Press enter/return if your selections match: " + "\033[0m")
                     if column_fixes == "":
                         break
@@ -703,8 +778,12 @@ class CourseraController:
                     if valid_fix == True:
                         break
                 time.sleep(0.05)
+
+                # Break out of the reconfig flow if no edits need to be made
                 if column_fixes == "":
                     break
+
+                # Split the user's fix selection and process each fix sequentially
                 else:
                     for fix in column_fixes.split(","):
                         if fix in built_in_reqs:
@@ -834,6 +913,7 @@ class CourseraController:
         except Exception as e:
             print(f" Error: Failed to resolve issues with selected columns: {e}")
 
+        # 8) Attempt to scrape the required columns from the gradebook of the first user selected section
         try:    
             if self.cinamode:
                 os.system('cls' if os.name == 'nt' else 'clear')
@@ -848,26 +928,38 @@ class CourseraController:
                     print("   ❌ ERROR: 'student id' not found among the required columns!")
                     return
             col_selection = (required, primary_key_index, honor_index, main_indices, headers)
-            # Now scrape the first session with these columns
+            # Now scrape the first section with these columns
             # Then navigate back to the courses page (or do the next link).
-            self.scrape_grades_for_session(course_title, fs_s, fs_link, col_selection)
+            self.scrape_grades_for_section(course_title, fs_s, fs_link, col_selection)
             # For subsequent selected links
         except Exception as e:
             print(f" Error: Failed to scrape first course: {e}")
 
+        # 9) Scrape gradebooks for all subsequent course sessions.
         for sindex in range(1, len(selected_links)):
             sc_c, sc_s, sc_link = selected_links[sindex]
-            self.scrape_grades_for_session(course_title, sc_s, sc_link, col_selection)
+            self.scrape_grades_for_section(course_title, sc_s, sc_link, col_selection)
 
         print(f"\n      ••• 🌟" + "\033[1m" + f" Finished scraping for course '{course_title}'!" + "\033[0m" + " 🌟 •••")
         time.sleep(1)
 
-    def scrape_grades_for_session(self, course_name, session_name, link, col_selection):
+
+    """
+        * Function: scrape_grades_for_section(course_name, section_name, link, col_selection)
+        * Purpose: Handles the navigation and scraping of individual Course Section Gradebooks.
+        * Flow:
+            1. Navigate to the Course Section Gradebook link
+            2. Locates the gradebook table element, then performs the scrape using self.section_page.scrape_grade_rows()
+            3. Constructs the output .csv file, which is a process that differs in production vs. test mode
+    """
+    def scrape_grades_for_section(self, course_name, section_name, link, col_selection):
         if self.cinamode:
                 os.system('cls' if os.name == 'nt' else 'clear')
+
+        # 1) Navigate to the current course sessions gradebook view
         try:
             time.sleep(0.05)
-            print(f"\n\n      🌟 Session: {session_name}")
+            print(f"\n\n      🌟 section: {section_name}")
             print(f"      🌟 Course: {course_name}")
             spinner = Spinner("      🔄 Scraping table grades...")
             spinner.start()
@@ -876,36 +968,40 @@ class CourseraController:
 
             (selected_headers, pk_index, honor_index, main_indices, full_headers) = col_selection
             if self.testing:
-                self.session_page.toggle_staff_learners()
+                self.section_page.toggle_staff_learners()
         except Exception as e:
-            print(f" Error: Failed to load grade table for session: {e}")
+            print(f" Error: Failed to load grade table for section: {e}")
 
-        # Wait for table to appear
+        # Wait for gradebook to appear
         try:
             WebDriverWait(self.driver, 15).until(
                 EC.presence_of_element_located((By.XPATH, "//table//tbody"))
             )
         except Exception as e:
-            print(f"   ❌ ERROR: Selenium couldn't find the Gradebook for session:\n  • '{session_name}'\n ••• Skipping •••")
+            print(f"   ❌ ERROR: Selenium couldn't find the Gradebook for section:\n  • '{section_name}'\n ••• Skipping •••")
             return
 
+        # 2) Scrape all rows gradebook for the required columns.
         try:
-            rows = self.session_page.get_grade_rows()
+            rows = self.section_page.get_grade_rows()
         except Exception as e:
             print(f" Error: Failed to Scrape grade rows: {e}")
         if not rows:
-            print(f"   ❌ ERROR: No grade rows found for session:\n    • '{session_name}'\n ••• Skipping •••")
+            print(f"   ❌ ERROR: No grade rows found for section:\n    • '{section_name}'\n ••• Skipping •••")
             return
 
+        # 3) Tailor the gradebook .csv file depending on product/test mode
         try:
-            # filter each row
+            # Filter each row
             data_rows = []
             for row in rows:
                 filtered = [row[i] if i < len(row) else "" for i in main_indices]
                 data_rows.append(filtered)
 
-            # Build header row from selected indices
-            # If in testing mode and there is a "Name" column, split it and add Student ID
+            # Build the header row from selected indices
+            # If in testing mode and there is a "Name" column, split it and generate dummy Student ID
+            # - Dummy Student IDs are in the format '100000001, 100000002, ...'
+            # - Ensure you're test GradeAddReport.xslx file correctly reflects dummy id generation here.
             if self.testing:
                 name_idx = selected_headers.index("Name")
                 # Remove "Name" and insert "First Name" and "Last Name" at its position
@@ -942,33 +1038,40 @@ class CourseraController:
                     row.append(str(student_ids[original_name]))
                     new_data_rows.append(row)
                 data_rows = new_data_rows
+
         except Exception as e:
             print(f" Error: Failed to filter table rows or adjust for test mode: {e}")
 
+        # Add new column "catalog" from the section_name (assumes section_name.split() returns at least 2 tokens)
         try:
-            # Add new column "catalog" from the session_name (assumes session_name.split() returns at least 2 tokens)
-            session_title_parts = session_name.split()
-            catalog_value = session_title_parts[1] if len(session_title_parts) > 1 else ""
+            section_title_parts = section_name.split()
+            catalog_value = section_title_parts[1] if len(section_title_parts) > 1 else ""
             selected_headers.append("Catalog No.")
             for row in data_rows:
                 row.append(catalog_value)
         except Exception as e:
             print(f" Error: Failed to add catalog column: {e}")
         spinner.stop()
-        try:
 
-            # final output path
+        # 3.5) Construct and generate output gradebook .csv file
+        try:
+            # Final output path
             base_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(__file__)
+            # Will generate a new folder called 'Coursera-Gradebooks' for storing generated .csv gradebook files.
             output_dir = os.path.join(base_dir, "Coursera-Gradebooks")
             os.makedirs(output_dir, exist_ok=True)
-            filename = f"Coursera_Gradebook_{BasePage.sanitize_filename(session_title_parts[1])}_{BasePage.sanitize_filename(session_title_parts[0])}.csv"
+
+            # Generates unique file names in the format 'Coursera_Gradebook_<Catalog No.>_CSCA.csv
+            filename = f"Coursera_Gradebook_{BasePage.sanitize_filename(section_title_parts[1])}_{BasePage.sanitize_filename(section_title_parts[0])}.csv"
             filepath = os.path.join(output_dir, filename)
+
+            # Generate .csv gradebook file
             with open(filepath, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(selected_headers)
                 writer.writerows(data_rows)
             print(f"      📝" + "\033[1m" + " Saved:" + "\033[0m")
-            print(f"         📌 Gradebook: {session_name}")
+            print(f"         📌 Gradebook: {section_name}")
             print(f"         📌 To: {filepath[0:len(filepath) - len(filename)]}")
             print(f"         📌 Named: {filename}")
 
@@ -978,7 +1081,10 @@ class CourseraController:
         except Exception as e:
             print(f" Error: Failed to write gradebook to the Coursera-Gradebooks Folder in your root directory: {e}")
 
-
+"""
+    * Function: main()
+    * Purpose: Call this funciton to test coursera scraping in isolation (No gradebook validation or emailing)
+"""
 def main():
 
     try:
